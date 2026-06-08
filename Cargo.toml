@@ -1,0 +1,43 @@
+[package]
+name = "tokenaccountant"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web 框架
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["full"] }
+
+# 分词器
+tiktoken-rs = "0.2"
+tokenizers = "0.19"
+
+# 数据存储
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# 加密（计算 hash）
+sha2 = "0.10"
+
+# 错误处理
+anyhow = "1"
+thiserror = "1"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# 配置
+toml = "0.8"
+dirs = "5"
+
+# HTTP 客户端
+reqwest = { version = "0.11", features = ["json"] }
+
+# 序列化
+bytes = "1"
+http-body-util = "0.1"
