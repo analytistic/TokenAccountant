@@ -18,6 +18,18 @@ pub struct TauriState {
 }
 
 #[tauri::command]
+pub async fn list_audit_logs(
+    state: State<'_, TauriState>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<crate::auditor::diff_comparator::AuditRecord>, String> {
+    state.provider_manager.lock().await
+        .list_audit_logs(limit, offset, false)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_providers(state: State<'_, TauriState>) -> Result<Vec<Provider>, String> {
     state.provider_manager.lock().await.list().await.map_err(|e| e.to_string())
 }

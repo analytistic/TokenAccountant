@@ -62,6 +62,11 @@ impl ProviderManager {
         db.delete_provider(id)
     }
 
+    pub async fn list_audit_logs(&self, limit: i64, offset: i64, suspicious_only: bool) -> Result<Vec<crate::auditor::diff_comparator::AuditRecord>> {
+        let db = self.db.lock().await;
+        db.list_audit_logs(limit, offset, suspicious_only)
+    }
+
     pub async fn switch_active(&self, id: &str) -> Result<Provider> {
         let db = self.db.lock().await;
         db.set_active_provider(id)?;

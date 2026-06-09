@@ -64,6 +64,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            api::commands::list_audit_logs,
             api::commands::list_providers,
             api::commands::get_active_provider,
             api::commands::create_provider,
