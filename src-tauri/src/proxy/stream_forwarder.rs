@@ -55,6 +55,12 @@ impl StreamForwarder {
                     Ok(chunk) => {
                         if let Ok(text) = std::str::from_utf8(&chunk) {
                             acc.lock().await.push_str(text);
+                        } else {
+                            // Chunk boundary may split a multi-byte UTF-8 sequence;
+                            // use lossy conversion rather than silent data loss.
+                            tracing::trace!("Stream chunk split UTF-8 boundary, using lossy conversion");
+                            let text = String::from_utf8_lossy(&chunk);
+                            acc.lock().await.push_str(&text);
                         }
                         if let Some(ref cb) = on_chunk {
                             cb(&chunk);
@@ -73,7 +79,7 @@ impl StreamForwarder {
         });
 
         let body = Body::from_stream(ReceiverStream::new(rx).map(|b| Ok::<_, axum::Error>(b)));
-        rb.body(body).unwrap()
+        rb.body(body).expect("valid response builder after setting status and headers")
     }
 
     pub async fn get_text(&self) -> String {
