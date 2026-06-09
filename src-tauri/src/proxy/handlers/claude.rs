@@ -88,29 +88,44 @@ async fn forward_with_audit(
                 let forwarder = StreamForwarder::new();
                 let response = forwarder.forward_stream(resp).await;
 
-                // --- 6. Post-stream audit ---
-                let full_text = forwarder.get_text().await;
-                let (claimed_input, claimed_output, claimed_cached) =
-                    extract_usage(&full_text, detected.api_format);
+                // --- 6. Post-stream audit in background ---
+                // The stream isn't consumed yet — forward_stream returns immediately.
+                // Spawn a background task that waits for stream end, then audits.
+                let audit_state = state.clone();
+                let audit_provider_id = provider_id.clone();
+                let audit_fmt = detected.api_format;
+                let audit_model_name = detected.model.clone();
+                let audit_body_str = body_str.clone();
+                let audit_tokenizer = tokenizer.clone();
+                tokio::spawn(async move {
+                    // Wait for the streamed response to be fully consumed
+                    while !forwarder.stream_ended.load(std::sync::atomic::Ordering::SeqCst) {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
 
-                let audit_result = audit_handle.await.unwrap_or((0, 0, String::new(), String::new()));
-                let (real_input, real_cached, model_name, _req_text) = audit_result;
+                    let full_text = forwarder.get_text().await;
+                    let (claimed_input, claimed_output, claimed_cached) =
+                        extract_usage(&full_text, audit_fmt);
 
-                let real_output = if let Some(ref t) = tokenizer {
-                    t.count_tokens(&full_text) as i32
-                } else { 0 };
+                    let audit_result = audit_handle.await.unwrap_or((0, 0, String::new(), String::new()));
+                    let (real_input, real_cached, model_name, _req_text) = audit_result;
 
-                let record = state.diff_comparator.compare(
-                    &provider_id, &model_name, detected.api_format.as_str(),
-                    &body_str, &full_text,
-                    claimed_input, claimed_output, claimed_cached,
-                    real_input, real_output, real_cached,
-                );
-                state.db.lock().await.insert_audit_log(&record).ok();
-                {
-                    let mut s = state.status.lock().await;
-                    s.requests_served += 1;
-                }
+                    let real_output = if let Some(ref t) = audit_tokenizer {
+                        t.count_tokens(&full_text) as i32
+                    } else { 0 };
+
+                    let record = audit_state.diff_comparator.compare(
+                        &audit_provider_id, &model_name, audit_fmt.as_str(),
+                        &audit_body_str, &full_text,
+                        claimed_input, claimed_output, claimed_cached,
+                        real_input, real_output, real_cached,
+                    );
+                    audit_state.db.lock().await.insert_audit_log(&record).ok();
+                    {
+                        let mut s = audit_state.status.lock().await;
+                        s.requests_served += 1;
+                    }
+                });
 
                 response
             } else {
