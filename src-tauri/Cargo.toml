@@ -1,0 +1,38 @@
+[package]
+name = "tokenaccountant"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tokenaccountant_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+http = "1"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+bincode = "1"
+tiktoken-rs = "0.2"
+tokenizers = "0.19"
+sha2 = "0.10"
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+toml = "0.8"
+dirs = "5"
+uuid = { version = "1", features = ["v4"] }
