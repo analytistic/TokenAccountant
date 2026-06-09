@@ -30,6 +30,14 @@ pub fn run() {
     let provider_manager = provider::manager::ProviderManager::new(db.clone());
     let provider_manager = Arc::new(Mutex::new(provider_manager));
 
+    // Initialize audit components
+    let mut tokenizer_factory = auditor::tokenizer::TokenizerFactory::new();
+    let gpt = std::sync::Arc::new(auditor::tokenizers::gpt::GptTokenizer::new());
+    tokenizer_factory.register("gpt".into(), gpt);
+
+    let diff_comparator = auditor::diff_comparator::DiffComparator::new(cfg.audit.suspicion_threshold);
+    let cache_detector = auditor::cache_detector::CacheDetector::new();
+
     let proxy_status = Arc::new(Mutex::new(proxy::types::ProxyStatus {
         running: false,
         port: 0,
@@ -46,6 +54,10 @@ pub fn run() {
             proxy_status,
             proxy_handle: Arc::new(Mutex::new(None)),
             original_env: Arc::new(Mutex::new(None)),
+            tokenizer_factory: std::sync::Arc::new(tokenizer_factory),
+            diff_comparator: std::sync::Arc::new(diff_comparator),
+            cache_detector: std::sync::Arc::new(tokio::sync::Mutex::new(cache_detector)),
+            db: db.clone(),
         })
         .setup(|_app| {
             tracing::info!("TokenAccountant started");

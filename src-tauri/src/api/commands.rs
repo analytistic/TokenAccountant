@@ -10,6 +10,11 @@ pub struct TauriState {
     pub proxy_status: std::sync::Arc<tokio::sync::Mutex<ProxyStatus>>,
     pub proxy_handle: std::sync::Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
     pub original_env: std::sync::Arc<tokio::sync::Mutex<Option<serde_json::Value>>>,
+    // Audit components
+    pub tokenizer_factory: std::sync::Arc<crate::auditor::tokenizer::TokenizerFactory>,
+    pub diff_comparator: std::sync::Arc<crate::auditor::diff_comparator::DiffComparator>,
+    pub cache_detector: std::sync::Arc<tokio::sync::Mutex<crate::auditor::cache_detector::CacheDetector>>,
+    pub db: std::sync::Arc<tokio::sync::Mutex<crate::storage::database::Database>>,
 }
 
 #[tauri::command]
@@ -64,8 +69,13 @@ pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Res
     }
 
     // Start proxy server
-    let pm = state.provider_manager.clone();
-    let server = ProxyServer::new(pm);
+    let server = ProxyServer::new(
+        state.provider_manager.clone(),
+        state.tokenizer_factory.clone(),
+        state.diff_comparator.clone(),
+        state.cache_detector.clone(),
+        state.db.clone(),
+    );
     let (port, handle) = server.start(&bind_addr).await.map_err(|e| e.to_string())?;
 
     // Store the handle so we can stop it later
