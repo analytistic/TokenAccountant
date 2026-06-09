@@ -196,7 +196,7 @@ let diff_comparator = DiffComparator::new(cfg.audit.suspicion_threshold);
 let cache_detector = CacheDetector::new();
 ```
 
-Update the `ProxyServer::new` call to pass these:
+Update the `ProxyServer::new` call in `run()`:
 
 ```rust
 let server = ProxyServer::new(
@@ -206,6 +206,33 @@ let server = ProxyServer::new(
     StdArc::new(Mutex::new(cache_detector)),
     db.clone(),
 );
+```
+
+**Also update `api/commands.rs`:** `start_proxy` creates a `ProxyServer::new(pm)`. Change it to pass the new fields. The `TauriState` needs to include the new audit components, or `start_proxy` can receive them from the existing state.
+
+```rust
+// In start_proxy (commands.rs)
+let server = ProxyServer::new(
+    state.provider_manager.clone(),
+    /* need tokenizer_factory, diff_comparator, cache_detector, db here */
+);
+```
+
+This means `TauriState` also needs to hold references to these new components. Add them:
+
+```rust
+pub struct TauriState {
+    pub provider_manager: ...,
+    pub proxy_server: ...,
+    pub proxy_status: ...,
+    pub proxy_handle: ...,
+    pub original_env: ...,
+    // New:
+    pub tokenizer_factory: Arc<TokenizerFactory>,
+    pub diff_comparator: Arc<DiffComparator>,
+    pub cache_detector: Arc<Mutex<CacheDetector>>,
+    pub db: Arc<Mutex<Database>>,
+}
 ```
 
 - [ ] **Step 3: Verify compilation**
