@@ -29,7 +29,7 @@ impl StreamForwarder {
     }
 
     /// Forward SSE response to client while accumulating text for post-stream audit.
-    pub async fn forward_stream(self, upstream_resp: reqwest::Response) -> Response<Body> {
+    pub async fn forward_stream(&self, upstream_resp: reqwest::Response) -> Response<Body> {
         let status = upstream_resp.status();
         let mut rb = Response::builder().status(status);
         for (k, v) in upstream_resp.headers().iter() {
