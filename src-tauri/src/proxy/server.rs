@@ -2,6 +2,7 @@ use axum::{Router, routing::any};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 use super::handlers;
 use super::types::ProxyStatus;
 
@@ -31,7 +32,7 @@ impl ProxyServer {
         ProxyServer { state }
     }
 
-    pub async fn start(&self, bind_addr: &str) -> Result<u16, anyhow::Error> {
+    pub async fn start(&self, bind_addr: &str) -> Result<(u16, JoinHandle<()>), anyhow::Error> {
         let app = Router::new()
             .route("/v1/messages", any(handlers::claude::handle_claude))
             .route("/v1/chat/completions", any(handlers::openai::handle_openai))
@@ -47,11 +48,11 @@ impl ProxyServer {
             status.port = port;
         }
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
 
-        Ok(port)
+        Ok((port, handle))
     }
 }
 

@@ -2,11 +2,14 @@ use tauri::State;
 use crate::provider::types::{Provider, CreateProviderRequest, UpdateProviderRequest};
 use crate::proxy::server::ProxyServer;
 use crate::proxy::types::ProxyStatus;
+use crate::config::cli_config;
 
 pub struct TauriState {
     pub provider_manager: std::sync::Arc<tokio::sync::Mutex<crate::provider::manager::ProviderManager>>,
     pub proxy_server: std::sync::Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
     pub proxy_status: std::sync::Arc<tokio::sync::Mutex<ProxyStatus>>,
+    pub proxy_handle: std::sync::Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    pub original_env: std::sync::Arc<tokio::sync::Mutex<Option<serde_json::Value>>>,
 }
 
 #[tauri::command]
@@ -49,10 +52,26 @@ pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Res
         }
     }
 
+    // Save original env before overwriting
+    let settings_path = cli_config::claude_settings_path();
+    if settings_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&settings_path) {
+            if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                let orig = settings.get("env").cloned();
+                *state.original_env.lock().await = orig;
+            }
+        }
+    }
+
+    // Start proxy server
     let pm = state.provider_manager.clone();
     let server = ProxyServer::new(pm);
-    let port = server.start(&bind_addr).await.map_err(|e| e.to_string())?;
+    let (port, handle) = server.start(&bind_addr).await.map_err(|e| e.to_string())?;
 
+    // Store the handle so we can stop it later
+    *state.proxy_handle.lock().await = Some(handle);
+
+    // Update status
     {
         let mut status = server.state.status.lock().await;
         status.running = true;
@@ -61,7 +80,42 @@ pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Res
     }
 
     *proxy_guard = Some(server);
+
+    // Write proxy settings to ~/.claude/settings.json
+    let (api_key, upstream_url) = {
+        let pm = state.provider_manager.lock().await;
+        let active = pm.get_active().await.ok().flatten();
+        (
+            active.as_ref().map(|p| p.api_key.clone()).unwrap_or_default(),
+            active.map(|p| p.api_base_url).unwrap_or_default(),
+        )
+    };
+    tracing::info!("Proxy {} → {}", port, upstream_url);
+    cli_config::write_claude_settings(port, &api_key).map_err(|e| e.to_string())?;
+
     Ok(port)
+}
+
+#[tauri::command]
+pub async fn stop_proxy(state: State<'_, TauriState>) -> Result<(), String> {
+    tracing::info!("Stopping proxy");
+    // Stop the Axum server
+    if let Some(handle) = state.proxy_handle.lock().await.take() {
+        handle.abort();
+    }
+
+    // Clear proxy state
+    {
+        let mut status = state.proxy_status.lock().await;
+        status.running = false;
+    }
+    *state.proxy_server.lock().await = None;
+
+    // Restore Claude settings
+    let orig = state.original_env.lock().await.take();
+    cli_config::restore_claude_settings(orig.as_ref()).map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]

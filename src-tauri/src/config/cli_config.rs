@@ -8,21 +8,33 @@ pub fn claude_settings_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".claude/settings.json"))
 }
 
-/// Write Claude Code settings.json to point to our proxy
+/// Write Claude Code settings.json to point to our proxy.
+/// Preserves all existing env fields (model mappings, effort level, etc.)
 pub fn write_claude_settings(proxy_port: u16, api_key: &str) -> Result<()> {
     let path = claude_settings_path();
-    let settings = if path.exists() {
+    let mut settings = if path.exists() {
         let content = std::fs::read_to_string(&path)?;
         serde_json::from_str::<Value>(&content).unwrap_or(json!({}))
     } else {
         json!({})
     };
 
-    let mut settings = settings;
-    settings["env"] = json!({
-        "ANTHROPIC_BASE_URL": format!("http://localhost:{}", proxy_port),
-        "ANTHROPIC_AUTH_TOKEN": api_key,
-    });
+    // Merge into existing env instead of replacing
+    let mut env = settings
+        .get("env")
+        .and_then(|v| v.as_object())
+        .map(|obj| {
+            let mut m = serde_json::Map::new();
+            for (k, v) in obj {
+                m.insert(k.clone(), v.clone());
+            }
+            m
+        })
+        .unwrap_or_else(|| serde_json::Map::new());
+
+    env.insert("ANTHROPIC_BASE_URL".into(), json!(format!("http://localhost:{}", proxy_port)));
+    env.insert("ANTHROPIC_AUTH_TOKEN".into(), json!(api_key));
+    settings["env"] = Value::Object(env);
 
     // Atomic write: temp file + rename
     let parent = path.parent().unwrap();
@@ -40,17 +52,23 @@ pub fn write_claude_settings(proxy_port: u16, api_key: &str) -> Result<()> {
     Ok(())
 }
 
-/// Restore original settings (remove proxy env vars)
-pub fn restore_claude_settings() -> Result<()> {
+/// Restore env settings after proxy stops.
+/// If `original_env` is provided, restore it exactly; otherwise just remove proxy fields.
+pub fn restore_claude_settings(original_env: Option<&Value>) -> Result<()> {
     let path = claude_settings_path();
     if !path.exists() {
         return Ok(());
     }
     let content = std::fs::read_to_string(&path)?;
     let mut settings: Value = serde_json::from_str(&content)?;
-    if let Some(obj) = settings.as_object_mut() {
-        obj.remove("env");
+
+    if let Some(orig) = original_env {
+        settings["env"] = orig.clone();
+    } else if let Some(env) = settings.get_mut("env").and_then(|e| e.as_object_mut()) {
+        env.remove("ANTHROPIC_BASE_URL");
+        env.remove("ANTHROPIC_AUTH_TOKEN");
     }
+
     let content = serde_json::to_string_pretty(&settings)?;
     std::fs::write(&path, content)?;
     Ok(())

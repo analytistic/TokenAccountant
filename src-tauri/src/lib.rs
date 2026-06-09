@@ -44,6 +44,8 @@ pub fn run() {
             provider_manager,
             proxy_server: Arc::new(Mutex::new(None)),
             proxy_status,
+            proxy_handle: Arc::new(Mutex::new(None)),
+            original_env: Arc::new(Mutex::new(None)),
         })
         .setup(|_app| {
             tracing::info!("TokenAccountant started");
@@ -57,6 +59,7 @@ pub fn run() {
             api::commands::delete_provider,
             api::commands::switch_provider,
             api::commands::start_proxy,
+            api::commands::stop_proxy,
             api::commands::get_proxy_status,
         ])
         .run(tauri::generate_context!())
