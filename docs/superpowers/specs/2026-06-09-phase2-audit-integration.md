@@ -4,31 +4,36 @@
 
 **Goal:** 将 Tokenizer、DiffComparator、CacheDetector 接入代理流程，实现请求/响应的自动化审计，并在前端展示审计结果
 
-**Architecture:** 在现有 Axum Handler 中插入审计步骤，采用"先转发后审计"模式（A 方案）。请求到达时先算 input tokens 和缓存命中，然后转发。响应使用 SSE 流式逐块转发并累加文本，流结束后算 output tokens，对比差异，结果存 SQLite 并展示在前端。预留"边转发边审计"的扩展点（B 方案）。
+**Architecture:** 在现有 Axum Handler 中插入审计步骤，采用"转发与审计异步并行"模式（A 方案）。请求到达后立即并行执行：线程 1 转发请求并逐 chunk 转发 SSE 响应、线程 2 后台算 input tokens 和缓存检测。响应流结束后算 output tokens，对比差异，结果存 SQLite 并展示在前端。预留"边转发边审计"的扩展点（B 方案）。
 
 ---
 
 ## 设计决策
 
-### 1. 审计模式：A 方案（先转发后审计）
+### 1. 审计模式：A 方案（转发与审计异步并行）
+
+转发和审计在两个异步任务中并行执行，互不等待。流结束后合并结果做 diff 对比。
 
 **选择理由：**
 - 不影响流式体验（Claude Code 实时看到 thinking token）
+- 不增加转发延迟（审计在后台进行）
 - 流结束后算总账更精确（tiktoken 对整个文本一次性 encode）
-- 复杂度低，容易验证
 - 对于显著虚报（>5%），A 方案完全够用
 
 **流程：**
 ```
-请求到达 → 算 input tokens → 检测缓存 → 转发请求
-                                            ↓
-                              SSE 流式转发（逐 chunk）→ Claude Code
-                              ↓
-                              累加文本
-                              ↓
-                    流结束 → 算 output tokens
-                     ↓
-               Diff 对比 → 存 SQLite → 前端展示
+请求到达
+  ├─ 线程 1: 立即转发 → SSE 流式转发（逐 chunk）→ Claude Code
+  │                                            ↓
+  │                                      累加文本
+  │                                            ↓
+  │                                 流结束 + 线程 2 完成
+  │
+  ├─ 线程 2: 算 input tokens（后台，与转发并行）
+  │          CacheDetector.detect/store
+  │
+  ▼
+  Diff 对比 → 存 SQLite → 前端展示
 ```
 
 **B 方案（边转发边审计）** 预留在 `StreamForwarder` 的回调接口中，未来可以通过逐 chunk encode 实现实时 token 计算。
