@@ -36,7 +36,7 @@ impl Tokenizer for GptTokenizer {
                 text.push_str(r);
                 text.push('\n');
             }
-            text.push_str(&msg.content);
+            text.push_str(&msg.content_text());
             text.push('\n');
             if let Some(ref tcs) = msg.tool_calls {
                 for tc in tcs {
@@ -57,7 +57,7 @@ impl Tokenizer for GptTokenizer {
             text.push_str(r);
             text.push_str("[/thinking]\n");
         }
-        text.push_str(&msg.content);
+        text.push_str(&msg.content_text());
         text.push('\n');
         if let Some(ref tcs) = msg.tool_calls {
             for tc in tcs {

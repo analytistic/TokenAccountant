@@ -202,9 +202,10 @@ impl StreamForwarder {
 
         NormalizedMessage {
             role: "assistant".into(),
-            content,
+            content_parts: vec![crate::auditor::message_converter::ContentPart::Text(content)],
             reasoning: thinking,
             tool_calls,
+            tool_call_id: None,
         }
     }
 

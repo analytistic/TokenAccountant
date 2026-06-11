@@ -1,5 +1,5 @@
 use crate::auditor::tokenizer::Tokenizer;
-use crate::auditor::message_converter::Conversation;
+use crate::auditor::message_converter::{ContentPart, Conversation, NormalizedMessage};
 use super::gpt::GptTokenizer;
 
 /// DeepSeek-V4 tokenizer with DSML chat template.
@@ -30,7 +30,7 @@ impl Tokenizer for DeepSeekTokenizer {
         self.gpt.count_tokens(text)
     }
 
-    fn render_output(&self, msg: &crate::auditor::message_converter::NormalizedMessage) -> String {
+    fn render_output(&self, msg: &NormalizedMessage) -> String {
         render_assistant_output(msg)
     }
 
@@ -55,7 +55,10 @@ impl Tokenizer for DeepSeekTokenizer {
 /// Merge role:"tool" messages into the preceding user message as <tool_result> blocks.
 /// DeepSeek-V4 has no standalone "tool" role — tool results are embedded in user messages.
 /// Tool results are placed BEFORE user text, matching Anthropic's tool_result ordering.
-fn merge_tool_messages(messages: Vec<crate::auditor::message_converter::NormalizedMessage>) -> Vec<crate::auditor::message_converter::NormalizedMessage> {
+///
+/// vLLM's conversion creates "tool" role messages from tool_result blocks.
+/// This function reassembles them into DSML's inline format.
+fn merge_tool_messages(messages: Vec<NormalizedMessage>) -> Vec<NormalizedMessage> {
     let mut tool_results: Vec<Option<Vec<String>>> = vec![None; messages.len()];
 
     let mut i = 0;
@@ -64,7 +67,7 @@ fn merge_tool_messages(messages: Vec<crate::auditor::message_converter::Normaliz
             let tool_start = i;
             let mut texts = Vec::new();
             while i < messages.len() && messages[i].role == "tool" {
-                texts.push(messages[i].content.clone());
+                texts.push(messages[i].content_text());
                 i += 1;
             }
             // Assign to the PRECEDING user message (tool result belongs to the user that follows assistant's tool_use)
@@ -87,14 +90,14 @@ fn merge_tool_messages(messages: Vec<crate::auditor::message_converter::Normaliz
         let mut merged = msg.clone();
         if let Some(ref texts) = tool_results[i] {
             // Tool results come BEFORE user text (matches Anthropic and DeepSeek format)
-            let mut new_content = String::new();
+            let mut new_parts = Vec::new();
             for t in texts {
-                new_content.push_str("<tool_result>");
-                new_content.push_str(t);
-                new_content.push_str("</tool_result>\n");
+                new_parts.push(ContentPart::Text(
+                    format!("<tool_result>{}</tool_result>\n", t),
+                ));
             }
-            new_content.push_str(&merged.content);
-            merged.content = new_content;
+            new_parts.extend(merged.content_parts.clone());
+            merged.content_parts = new_parts;
         }
         result.push(merged);
     }
@@ -135,15 +138,16 @@ fn render_tools(tools: &[crate::auditor::message_converter::ToolDef]) -> String 
 ///
 /// The `<think>` before reasoning comes from the user→assistant transition,
 /// not from the assistant template itself.
-fn encode_messages(messages: &[crate::auditor::message_converter::NormalizedMessage], tools_text: Option<String>) -> String {
+fn encode_messages(messages: &[NormalizedMessage], tools_text: Option<String>) -> String {
     let mut prompt = String::new();
     prompt.push_str("<｜begin▁of▁sentence｜>");
 
     for (i, msg) in messages.iter().enumerate() {
+        let content = msg.content_text();
         match msg.role.as_str() {
             "system" => {
                 // system_msg_template
-                prompt.push_str(&msg.content);
+                prompt.push_str(&content);
                 if i == 0 {
                     if let Some(ref t) = tools_text {
                         prompt.push_str(t);
@@ -153,7 +157,7 @@ fn encode_messages(messages: &[crate::auditor::message_converter::NormalizedMess
             "user" => {
                 // user_msg_template: <｜User｜>{content}
                 prompt.push_str("<｜User｜>");
-                prompt.push_str(&msg.content);
+                prompt.push_str(&content);
 
                 // Transition: look ahead to determine if the next assistant uses thinking.
                 // vLLM: ASSISTANT_SP_TOKEN + <think> if reasoning follows, else </think>
@@ -168,7 +172,7 @@ fn encode_messages(messages: &[crate::auditor::message_converter::NormalizedMess
                 prompt.push_str(&render_assistant_output_internal(msg));
             }
             _ => {
-                prompt.push_str(&msg.content);
+                prompt.push_str(&content);
             }
         }
     }
@@ -187,22 +191,23 @@ fn encode_messages(messages: &[crate::auditor::message_converter::NormalizedMess
 /// Use for standalone output token counting (post-stream audit).
 /// For in-conversation rendering, the <think> prefix comes from the
 /// user→assistant transition instead.
-pub fn render_assistant_output(msg: &crate::auditor::message_converter::NormalizedMessage) -> String {
+pub fn render_assistant_output(msg: &NormalizedMessage) -> String {
     render_assistant_output_internal_(msg, true)
 }
 
 /// Render assistant output without the leading <think> tag.
 /// Used internally by encode_messages — <think> is provided by the
 /// user→assistant transition in the conversation.
-pub fn render_assistant_output_internal(msg: &crate::auditor::message_converter::NormalizedMessage) -> String {
+pub fn render_assistant_output_internal(msg: &NormalizedMessage) -> String {
     render_assistant_output_internal_(msg, false)
 }
 
 fn render_assistant_output_internal_(
-    msg: &crate::auditor::message_converter::NormalizedMessage,
+    msg: &NormalizedMessage,
     add_think: bool,
 ) -> String {
     let mut out = String::new();
+    let content = msg.content_text();
 
     if let Some(ref r) = msg.reasoning {
         if add_think {
@@ -213,7 +218,7 @@ fn render_assistant_output_internal_(
     }
 
     // content
-    out.push_str(&msg.content);
+    out.push_str(&content);
 
     // tool calls (DSML)
     if let Some(ref tcs) = msg.tool_calls {
