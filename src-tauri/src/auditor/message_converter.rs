@@ -178,14 +178,19 @@ pub fn from_anthropic(
             "user" => {
                 // vLLM: user messages — convert content blocks
                 // text → text part, image → image_url part, tool_result → separate messages
-                let (content_parts, _reasoning, _tool_calls) = convert_content_parts(content);
-                conv_messages.push(NormalizedMessage {
-                    role: "user".into(),
-                    content_parts,
-                    reasoning: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                });
+                let (content_parts, _reasoning, _tool_calls) = convert_content_parts(content, "user");
+
+                // vLLM guard: skip user messages with no content
+                // (e.g. a user message containing only tool_result blocks)
+                if !content_parts.is_empty() {
+                    conv_messages.push(NormalizedMessage {
+                        role: "user".into(),
+                        content_parts,
+                        reasoning: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                }
 
                 // vLLM: tool_result blocks create additional messages AFTER the user message
                 // (see _convert_user_tool_result)
@@ -195,7 +200,7 @@ pub fn from_anthropic(
             "assistant" => {
                 // vLLM: assistant messages — text → content, thinking → reasoning,
                 // tool_use → tool_calls, redacted_thinking → skip
-                let (content_parts, reasoning, tool_calls) = convert_content_parts(content);
+                let (content_parts, reasoning, tool_calls) = convert_content_parts(content, "assistant");
                 conv_messages.push(NormalizedMessage {
                     role: "assistant".into(),
                     content_parts,
@@ -263,9 +268,15 @@ pub fn from_anthropic(
 /// - content_parts: text, image blocks
 /// - reasoning_parts: thinking blocks
 /// - tool_calls: tool_use blocks
-/// - tool_result: handled separately (not here)
+/// - tool_result: if user role → handled by `extract_tool_result_messages` separately;
+///                if non-user role → inlined as "Tool result: {text}" (vLLM `_convert_tool_result_block`)
+///
+/// `role` controls how tool_result blocks are treated:
+/// - `"user"` → skip (extract_tool_result_messages handles them)
+/// - other    → inline as "Tool result: {text}"
 fn convert_content_parts(
     content: Option<&Value>,
+    role: &str,
 ) -> (Vec<ContentPart>, Option<String>, Option<Vec<ToolCall>>) {
     let mut content_parts: Vec<ContentPart> = Vec::new();
     let mut reasoning_parts: Vec<String> = Vec::new();
@@ -283,7 +294,7 @@ fn convert_content_parts(
         // Array content — blocks
         Some(c) if c.is_array() => {
             for block in c.as_array().unwrap() {
-                convert_block(block, &mut content_parts, &mut reasoning_parts, &mut tool_calls);
+                convert_block(block, role, &mut content_parts, &mut reasoning_parts, &mut tool_calls);
             }
         }
         _ => {}
@@ -305,8 +316,13 @@ fn convert_content_parts(
 }
 
 /// Convert a single content block — matches vLLM's `_convert_block`.
+///
+/// `role` is passed through for tool_result handling:
+/// - `"user"` → separate "tool" role messages (via `extract_tool_result_messages`)
+/// - other    → inline as "Tool result: {text}" text part (vLLM `_convert_tool_result_block` else-branch)
 fn convert_block(
     block: &Value,
+    role: &str,
     content_parts: &mut Vec<ContentPart>,
     reasoning_parts: &mut Vec<String>,
     tool_calls: &mut Vec<ToolCall>,
@@ -357,9 +373,30 @@ fn convert_block(
             });
         }
         "tool_result" => {
-            // vLLM: handled by `_convert_user_tool_result` (called from `_convert_tool_result_block`)
-            // which creates separate "tool" role messages. Not processed here inline — caller
-            // uses extract_tool_result_messages for this.
+            if role == "user" {
+                // vLLM: user role — `_convert_user_tool_result` creates separate "tool" role messages.
+                // Handled by `extract_tool_result_messages` in the caller, not here.
+            } else {
+                // vLLM: non-user role — inline as "Tool result: {content}" text part
+                // (`_convert_tool_result_block` else-branch)
+                let result_content = block.get("content");
+                let text = match result_content {
+                    Some(c) if c.is_string() => c.as_str().unwrap_or("").to_string(),
+                    Some(c) if c.is_array() => {
+                        let mut parts = Vec::new();
+                        for item in c.as_array().unwrap() {
+                            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                                    parts.push(t.to_string());
+                                }
+                            }
+                        }
+                        parts.join("\n")
+                    }
+                    _ => String::new(),
+                };
+                content_parts.push(ContentPart::Text(format!("Tool result: {}", text)));
+            }
         }
         "tool_reference" => {
             // vLLM: pass — expanded during tool_result processing
@@ -425,20 +462,15 @@ fn extract_tool_result_messages(content: Option<&Value>) -> Vec<NormalizedMessag
         let result_content = block.get("content");
         let (text_content, image_urls, tool_refs) = extract_tool_result_content_parts(result_content);
 
-        // Tool role message with text content (vLLM: {"role": "tool", "tool_call_id": ..., "content": text})
-        if !text_content.is_empty() || tool_refs.is_empty() {
-            let mut parts = Vec::new();
-            if !text_content.is_empty() {
-                parts.push(ContentPart::Text(text_content));
-            }
-            results.push(NormalizedMessage {
-                role: "tool".into(),
-                content_parts: parts,
-                reasoning: None,
-                tool_calls: None,
-                tool_call_id: Some(tool_use_id.clone()),
-            });
-        }
+        // Tool role message with text content (vLLM: ALWAYS creates,
+        // even if text is empty — `"content": tool_text or ""`)
+        results.push(NormalizedMessage {
+            role: "tool".into(),
+            content_parts: vec![ContentPart::Text(text_content)],
+            reasoning: None,
+            tool_calls: None,
+            tool_call_id: Some(tool_use_id.clone()),
+        });
 
         // Image URLs as separate "user" role messages (vLLM pattern)
         for url in image_urls {
