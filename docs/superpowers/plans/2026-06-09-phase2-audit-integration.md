@@ -655,3 +655,51 @@ git commit -m "docs: add Pattern B extension point documentation"
 - `StreamForwarder::forward_stream` returns `Response<Body>` consistent with existing handlers
 - `AuditRecord` type from `diff_comparator.rs` is used in IPC command return type
 - `extract_usage` returns `(i32, i32, i32)` matching existing signature
+
+---
+
+## Post-Implementation Findings
+
+### Issue 1: `extract_request_text` 遗漏大量 input 内容
+
+**发现时间:** 2026-06-10, Debug/验收阶段
+
+**问题:** `extract_request_text` 只提取了 `messages[].content` 中 `string` 类型的文本，导致 `real_input_tokens` 严重偏低。遗漏的内容包括：
+
+| 遗漏内容 | 原因 |
+|---|---|
+| 外层 `system` 字段（3 条 text block） | 未读取 |
+| `messages[].content` 中 `tool_use` block | 仅处理 `as_str()`，数组内容跳过 |
+| `messages[].content` 中 `tool_result` block | 同上 |
+| `messages[].content` 中 `thinking` block | 同上 |
+| `tools` 定义（26 个工具） | 未读取 |
+
+**修复方案:**
+1. 新建 `auditor/message_converter.rs`，负责将 Anthropic API 格式转换为标准化的 `Vec<NormalizedMessage>`
+2. 按 `system → tools → messages[0..n]` 顺序组织
+3. `extract_request_text` 被移除，调用方改用 `message_converter::from_anthropic_body()` + `tokenizer.apply_chat_template()`
+
+### Issue 2: Chat template 归属不清晰
+
+**问题:** 原来的 `extract_request_text` 直接在格式转换层拼接文本，但 chat template（模型特有分隔符、特殊 token）应属于 tokenizer 层职责。
+
+**修正:**
+- `Tokenizer` trait 新增 `apply_chat_template()` 方法
+- GptTokenizer 实现简单文本拼接，ClaudeTokenizer 保留占位
+- 未来 DeepSeek `encoding_dsv4` 接入时只需在该 tokenizer 里实现 DSML 格式的 template
+
+### Issue 3: CacheDetector 低估 cache hit（缺失 output token 存储）
+
+**发现时间:** 2026-06-10 Debug/验收阶段
+
+**问题:** `cache_detector.store(&ids)` 只存了请求 prompt 的 token IDs，output token 从未存入。但 vLLM 的 KV Cache 同时缓存 prompt 和 decode 产出的 output tokens。
+
+**修复:** 按 block hash chain 方案重写 CacheDetector，post-stream 调 `store_combined(prompt_ids, output_ids)`。见 `2026-06-10-cache-detector-fix.md`。
+
+### Issue 4: Post-stream 轮询等待流结束
+
+**发现时间:** 2026-06-10 Debug/验收阶段
+
+**问题:** post-stream 使用 `while !stream_ended.load(...) { sleep(50ms).await }` 轮询等待流结束。这是忙等，延迟粗糙（50ms 粒度），增加 CPU 浪费。
+
+**修复方向:** 改用 `tokio::sync::Notify` 事件通知替代轮询。简化为：`forward_stream` 完成后 `notify.notified()` 唤醒等待的 post-stream task。

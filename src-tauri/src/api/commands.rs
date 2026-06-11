@@ -2,9 +2,11 @@ use tauri::State;
 use crate::provider::types::{Provider, CreateProviderRequest, UpdateProviderRequest};
 use crate::proxy::server::ProxyServer;
 use crate::proxy::types::ProxyStatus;
+use crate::config::app_config::AppConfig;
 use crate::config::cli_config;
 
 pub struct TauriState {
+    pub config: AppConfig,
     pub provider_manager: std::sync::Arc<tokio::sync::Mutex<crate::provider::manager::ProviderManager>>,
     pub proxy_server: std::sync::Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
     pub proxy_status: std::sync::Arc<tokio::sync::Mutex<ProxyStatus>>,
@@ -82,6 +84,7 @@ pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Res
 
     // Start proxy server
     let server = ProxyServer::new(
+        state.config.clone(),
         state.provider_manager.clone(),
         state.tokenizer_factory.clone(),
         state.diff_comparator.clone(),

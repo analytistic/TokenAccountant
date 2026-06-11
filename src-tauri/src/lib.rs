@@ -36,7 +36,7 @@ pub fn run() {
     tokenizer_factory.register("gpt".into(), gpt);
 
     let diff_comparator = auditor::diff_comparator::DiffComparator::new(cfg.audit.suspicion_threshold);
-    let cache_detector = auditor::cache_detector::CacheDetector::new();
+    let cache_detector = auditor::cache_detector::CacheDetector::new(cfg.audit.max_cached_blocks);
 
     let proxy_status = Arc::new(Mutex::new(proxy::types::ProxyStatus {
         running: false,
@@ -49,6 +49,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .manage(api::commands::TauriState {
+            config: cfg.clone(),
             provider_manager,
             proxy_server: Arc::new(Mutex::new(None)),
             proxy_status,

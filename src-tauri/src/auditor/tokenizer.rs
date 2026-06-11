@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use super::message_converter::{Conversation, NormalizedMessage};
 
 pub trait Tokenizer: Send + Sync {
     fn encode(&self, text: &str) -> Vec<u32>;
@@ -7,6 +8,12 @@ pub trait Tokenizer: Send + Sync {
     fn count_tokens(&self, text: &str) -> u32 {
         self.encode(text).len() as u32
     }
+    /// Apply model-specific chat template to a Conversation.
+    /// Output is the formatted prompt string ready for tokenization.
+    fn apply_chat_template(&self, conv: &Conversation) -> String;
+    /// Render a single assistant output message to model-specific format.
+    /// Used for accurate output token counting (not raw SSE text).
+    fn render_output(&self, msg: &NormalizedMessage) -> String;
 }
 
 pub struct TokenizerFactory {
@@ -19,6 +26,7 @@ impl TokenizerFactory {
             tokenizers: HashMap::new(),
         };
         factory.register("gpt".into(), Arc::new(super::tokenizers::gpt::GptTokenizer::new()));
+        factory.register("deepseek".into(), Arc::new(super::tokenizers::deepseek::DeepSeekTokenizer::new()));
         factory
     }
 
@@ -27,8 +35,10 @@ impl TokenizerFactory {
     }
 
     pub fn for_model(&self, model: &str) -> Option<Arc<dyn Tokenizer>> {
-        if model.starts_with("gpt-") || model.starts_with("text-")
-            || model.starts_with("qwen-") || model.starts_with("deepseek-") {
+        if model.starts_with("deepseek-") {
+            self.tokenizers.get("deepseek").cloned()
+        } else if model.starts_with("gpt-") || model.starts_with("text-")
+            || model.starts_with("qwen-") {
             self.tokenizers.get("gpt").cloned()
         } else {
             None

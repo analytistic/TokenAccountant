@@ -5,6 +5,7 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use super::handlers;
 use super::types::ProxyStatus;
+use crate::config::app_config::AppConfig;
 use crate::auditor::tokenizer::TokenizerFactory;
 use crate::auditor::diff_comparator::DiffComparator;
 use crate::auditor::cache_detector::CacheDetector;
@@ -12,6 +13,7 @@ use crate::storage::database::Database;
 
 #[derive(Clone)]
 pub struct ProxyState {
+    pub config: AppConfig,
     pub provider_manager: Arc<Mutex<crate::provider::manager::ProviderManager>>,
     pub status: Arc<Mutex<ProxyStatus>>,
     pub tokenizer_factory: Arc<TokenizerFactory>,
@@ -26,6 +28,7 @@ pub struct ProxyServer {
 
 impl ProxyServer {
     pub fn new(
+        config: AppConfig,
         provider_manager: Arc<Mutex<crate::provider::manager::ProviderManager>>,
         tokenizer_factory: Arc<TokenizerFactory>,
         diff_comparator: Arc<DiffComparator>,
@@ -33,6 +36,7 @@ impl ProxyServer {
         db: Arc<Mutex<Database>>,
     ) -> Self {
         let state = ProxyState {
+            config,
             provider_manager,
             status: Arc::new(Mutex::new(ProxyStatus {
                 running: false,

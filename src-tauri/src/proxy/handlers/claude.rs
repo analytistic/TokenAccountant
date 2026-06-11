@@ -1,7 +1,7 @@
 use axum::{extract::State, http::{HeaderMap, Request}, body::Body, response::Response};
 use crate::proxy::server::ProxyState;
 use crate::proxy::stream_forwarder::StreamForwarder;
-use crate::auditor::model_detector::{detect, extract_request_text, extract_usage};
+use crate::auditor::model_detector::{detect, extract_usage};
 
 pub async fn handle_claude(
     State(state): State<ProxyState>,
@@ -28,7 +28,7 @@ async fn forward_with_audit(
     }
 
     // --- 1. Read request body ---
-    let body_bytes = axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await.unwrap_or_default();
+    let body_bytes = axum::body::to_bytes(req.into_body(), state.config.server.max_body_bytes as usize).await.unwrap_or_default();
     let body_str = String::from_utf8_lossy(&body_bytes).to_string();
 
     // --- 2. Detect model and API format ---
@@ -40,18 +40,21 @@ async fn forward_with_audit(
     let audit_state = state.clone();
     let audit_body = body_str.clone();
     let audit_detected_model = detected.model.clone();
-    let audit_fmt = detected.api_format;
+    let _audit_fmt = detected.api_format;
     let audit_handle = tokio::spawn(async move {
-        let request_text = extract_request_text(&audit_body, audit_fmt);
-        let (real_input, real_cached) = if let Some(ref t) = audit_tokenizer {
+        let (real_input, real_cached, conv) = if let Some(ref t) = audit_tokenizer {
+            let conv = crate::auditor::message_converter::from_anthropic_body(&audit_body);
+            let request_text = t.apply_chat_template(&conv);
             let ids = t.encode(&request_text);
-            let (cached_hit, _) = audit_state.cache_detector.lock().await.detect(&ids);
-            audit_state.cache_detector.lock().await.store(&ids);
-            (t.count_tokens(&request_text) as i32, cached_hit as i32)
+            let (cached_hit, _remaining) = audit_state.cache_detector.lock().await.detect(&ids);
+            let needs_prefill = ids.len() as i32 - cached_hit as i32;
+            (needs_prefill, cached_hit as i32, conv)
         } else {
-            (0, 0)
+            (0, 0, crate::auditor::message_converter::Conversation {
+                messages: vec![], tools: vec![],
+            })
         };
-        (real_input, real_cached, audit_detected_model, request_text)
+        (real_input, real_cached, audit_detected_model, conv)
     });
 
     // --- 4. Build upstream URL and headers ---
@@ -94,7 +97,7 @@ async fn forward_with_audit(
                 let audit_state = state.clone();
                 let audit_provider_id = provider_id.clone();
                 let audit_fmt = detected.api_format;
-                let audit_model_name = detected.model.clone();
+                let _audit_model_name = detected.model.clone();
                 let audit_body_str = body_str.clone();
                 let audit_tokenizer = tokenizer.clone();
                 tokio::spawn(async move {
@@ -107,12 +110,32 @@ async fn forward_with_audit(
                     let (claimed_input, claimed_output, claimed_cached) =
                         extract_usage(&full_text, audit_fmt);
 
-                    let audit_result = audit_handle.await.unwrap_or((0, 0, String::new(), String::new()));
-                    let (real_input, real_cached, model_name, _req_text) = audit_result;
+                    let audit_result = audit_handle.await.unwrap_or((0, 0, String::new(), crate::auditor::message_converter::Conversation {
+                        messages: vec![], tools: vec![],
+                    }));
+                    let (real_input, real_cached, model_name, conv) = audit_result;
 
+                    // Build structured output and count tokens properly
+                    let output_msg = forwarder.build_output().await;
                     let real_output = if let Some(ref t) = audit_tokenizer {
-                        t.count_tokens(&full_text) as i32
+                        let output_text = t.render_output(&output_msg);
+                        t.count_tokens(&output_text) as i32
                     } else { 0 };
+
+                    // Store: re-render full conversation WITH the new assistant message,
+                    // so cached block hashes match the next request's prompt prefix exactly.
+                    if let Some(ref t) = audit_tokenizer {
+                        // Clone output_msg WITHOUT reasoning to match what the
+                        // client will actually send in the next request (thinking
+                        // blocks are typically stripped from conversation history).
+                        let mut store_msg = output_msg.clone();
+                        store_msg.reasoning = None;
+                        let mut full_conv = conv.clone();
+                        full_conv.messages.push(store_msg);
+                        let rendered = t.apply_chat_template(&full_conv);
+                        let ids = t.encode(&rendered);
+                        audit_state.cache_detector.lock().await.store_combined(&ids);
+                    }
 
                     let record = audit_state.diff_comparator.compare(
                         &audit_provider_id, &model_name, audit_fmt.as_str(),

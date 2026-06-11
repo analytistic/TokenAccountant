@@ -56,44 +56,28 @@ pub fn detect(request_path: &str, body: &str) -> DetectionResult {
     DetectionResult { model: "unknown".into(), api_format: ApiFormat::Unknown }
 }
 
-/// Extract text from request body for tokenization
-pub fn extract_request_text(body: &str, format: ApiFormat) -> String {
-    let Ok(body_val) = serde_json::from_str::<Value>(body) else { return String::new() };
-    let mut text = String::new();
-
-    match format {
-        ApiFormat::OpenAI | ApiFormat::Anthropic => {
-            if let Some(messages) = body_val.get("messages").and_then(|m| m.as_array()) {
-                for msg in messages {
-                    if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
-                        text.push_str(content);
-                        text.push('\n');
+/// Extract the last `data: {...}` JSON from an SSE stream, or fall back to plain JSON parse.
+fn last_sse_json(body: &str) -> Option<Value> {
+    // SSE: events separated by \n\n, each has `data: {...}` line
+    for event in body.rsplit("\n\n") {
+        for line in event.lines() {
+            if let Some(json_str) = line.strip_prefix("data: ") {
+                if let Ok(v) = serde_json::from_str::<Value>(json_str) {
+                    // Only return events that have usage data
+                    if v.get("usage").is_some() {
+                        return Some(v);
                     }
                 }
             }
         }
-        ApiFormat::Gemini => {
-            if let Some(contents) = body_val.get("contents").and_then(|c| c.as_array()) {
-                for content in contents {
-                    if let Some(parts) = content.get("parts").and_then(|p| p.as_array()) {
-                        for part in parts {
-                            if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
-                                text.push_str(t);
-                                text.push('\n');
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        ApiFormat::Unknown => {}
     }
-    text
+    // Fallback: try parsing the whole body as plain JSON
+    serde_json::from_str(body).ok()
 }
 
-/// Extract usage from response body
+/// Extract usage from response body (SSE stream or plain JSON).
 pub fn extract_usage(response_body: &str, format: ApiFormat) -> (i32, i32, i32) {
-    let Ok(body_val) = serde_json::from_str::<Value>(response_body) else {
+    let Some(body_val) = last_sse_json(response_body) else {
         return (0, 0, 0);
     };
 
