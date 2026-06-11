@@ -199,6 +199,9 @@ impl Tokenizer for DeepSeekTokenizer {
 
         // Resolve params with DeepSeek defaults
         let thinking_mode = params.thinking_mode.as_deref().unwrap_or("thinking");
+        // Default true: matches vLLM's encode_messages default.
+        // vLLM drops reasoning from assistant messages before the last user,
+        // so we must do the same for store↔detect consistency.
         let drop_thinking = params.drop_thinking.unwrap_or(true);
         let add_default_bos_token = params.add_default_bos_token.unwrap_or(true);
         let reasoning_effort = params.reasoning_effort.as_deref();
