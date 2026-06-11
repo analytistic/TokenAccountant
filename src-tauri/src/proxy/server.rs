@@ -20,6 +20,7 @@ pub struct ProxyState {
     pub diff_comparator: Arc<DiffComparator>,
     pub cache_detector: Arc<Mutex<CacheDetector>>,
     pub db: Arc<Mutex<Database>>,
+    pub dev_trace_buffer: Arc<Mutex<crate::auditor::render_inspector::DevTraceBuffer>>,
 }
 
 pub struct ProxyServer {
@@ -34,6 +35,7 @@ impl ProxyServer {
         diff_comparator: Arc<DiffComparator>,
         cache_detector: Arc<Mutex<CacheDetector>>,
         db: Arc<Mutex<Database>>,
+        dev_trace_buffer: Arc<Mutex<crate::auditor::render_inspector::DevTraceBuffer>>,
     ) -> Self {
         let state = ProxyState {
             config,
@@ -48,6 +50,7 @@ impl ProxyServer {
             diff_comparator,
             cache_detector,
             db,
+            dev_trace_buffer,
         };
         ProxyServer { state }
     }

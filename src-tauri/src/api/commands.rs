@@ -17,6 +17,7 @@ pub struct TauriState {
     pub diff_comparator: std::sync::Arc<crate::auditor::diff_comparator::DiffComparator>,
     pub cache_detector: std::sync::Arc<tokio::sync::Mutex<crate::auditor::cache_detector::CacheDetector>>,
     pub db: std::sync::Arc<tokio::sync::Mutex<crate::storage::database::Database>>,
+    pub dev_trace_buffer: std::sync::Arc<tokio::sync::Mutex<crate::auditor::render_inspector::DevTraceBuffer>>,
 }
 
 #[tauri::command]
@@ -90,6 +91,7 @@ pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Res
         state.diff_comparator.clone(),
         state.cache_detector.clone(),
         state.db.clone(),
+        state.dev_trace_buffer.clone(),
     );
     let (port, handle) = server.start(&bind_addr).await.map_err(|e| e.to_string())?;
 

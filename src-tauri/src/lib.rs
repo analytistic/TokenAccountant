@@ -45,6 +45,10 @@ pub fn run() {
         requests_served: 0,
     }));
 
+    let dev_trace_buffer = std::sync::Arc::new(tokio::sync::Mutex::new(
+        auditor::render_inspector::DevTraceBuffer::new(100),
+    ));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -59,6 +63,7 @@ pub fn run() {
             diff_comparator: std::sync::Arc::new(diff_comparator),
             cache_detector: std::sync::Arc::new(tokio::sync::Mutex::new(cache_detector)),
             db: db.clone(),
+            dev_trace_buffer: dev_trace_buffer.clone(),
         })
         .setup(|_app| {
             tracing::info!("TokenAccountant started");
