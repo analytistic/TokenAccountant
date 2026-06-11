@@ -80,6 +80,8 @@ pub fn run() {
             api::commands::start_proxy,
             api::commands::stop_proxy,
             api::commands::get_proxy_status,
+            api::commands::list_dev_traces,
+            api::commands::clear_dev_traces,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TokenAccountant");

@@ -149,3 +149,20 @@ pub async fn stop_proxy(state: State<'_, TauriState>) -> Result<(), String> {
 pub async fn get_proxy_status(state: State<'_, TauriState>) -> Result<ProxyStatus, String> {
     Ok(state.proxy_status.lock().await.clone())
 }
+
+#[tauri::command]
+pub async fn list_dev_traces(
+    state: State<'_, TauriState>,
+) -> Result<Vec<crate::auditor::render_inspector::DevTrace>, String> {
+    let buffer = state.dev_trace_buffer.lock().await;
+    Ok(buffer.list())
+}
+
+#[tauri::command]
+pub async fn clear_dev_traces(
+    state: State<'_, TauriState>,
+) -> Result<(), String> {
+    let mut buffer = state.dev_trace_buffer.lock().await;
+    buffer.clear();
+    Ok(())
+}
