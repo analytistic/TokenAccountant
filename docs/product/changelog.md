@@ -1,46 +1,36 @@
-# Changelog
+# 产品发布日志
 
-## [0.2.0] - 2026-06-11
+## v0.2 — 审计接入
 
-### Added
-- Render Inspector 开发者面板（DevTraceBuffer + IPC + DevPanel 组件 + 开发者模式开关）
-- DevPanel 深色主题、Store/Detect 左右并排、请求列表底部条
-- TemplateParams 参数化（thinking_mode / reasoning_effort / drop_thinking / add_default_bos_token）
-- extract_template_params() 从请求体提取渲染参数
-- Tool call per-parameter DSML 编码（匹配官方 deepseek_v4_encoding）
-- sort_tool_results_by_call_order（按 tool_call 顺序排序 tool_result）
-- reasoning_effort='max' 前缀支持
-- Developer / response_format / wo_eos 支持
-- Tool_reference 支持
+> 发布日期: 2026-06-11
 
-### Changed
-- message_converter: ContentPart 枚举替代 flat content string，支持 image / text / tool_reference
-- NormalizedMessage: content_parts 替代 content，新增 tool_call_id 字段
-- deepseek tokenizer: 完全重写，匹配 vLLM deepseek_v4_encoding.py
-- merge_tool_messages: content_blocks 格式替代字符串拼接
-- _drop_thinking_messages: 匹配官方逻辑
-- store 路径保留 assistant reasoning（去掉 store_msg.reasoning = None）
-- Tokenizer trait: 新增 apply_chat_template_with 方法
+### 新功能
 
-### Fixed
-- store/detect 前缀不匹配（reasoning 被剥离导致）
-- 多个 system 消息只处理第一个
-- image block 被静默丢弃（转为 ContentPart::ImageUrl data URI）
-- redacted_thinking 透传问题
-- tool_result 子结构缺失（text + image + tool_reference）
-- 用户消息空内容时仍 push（匹配 vLLM "content" not in openai_msg 守卫）
-- tool 消息始终创建即使内容为空
+- **审计记录自动捕获** — 每次代理请求自动记录 input/output token 数，对比上游声称值，可疑请求自动标记
+- **请求列表页** — 查看所有审计记录，可疑请求红色高亮，正常灰色展示，一眼识别异常
+- **Render Inspector 开发者面板** — 开发者模式下展示 render 前后的文本对比，帮助验证 prefix cache 是否生效
+- **SSE 流式转发** — 请求响应逐 chunk 实时转发，不再等全部收完再返回，体验与直连一致
 
-## [0.1.0] - 2026-06-09
+### 改进
 
-### Added
-- Tauri 2 桌面壳 + React 前端
-- Provider CRUD 管理
-- Axum 代理服务器
-- SSE 流式转发
-- Token 计数（tiktoken-rs + claude fallback）
-- CacheDetector block hash chain（LCG 确定性 hash）
-- 审计记录 SQLite 存储
-- DeepSeek DSML 渲染（transition tokens / think tags / EOS）
-- x-anthropic-billing-header 过滤（cache-busting）
-- 配置集中化 AppConfig
+- **token 计数更精确** — 消息转换逻辑与 vLLM 推理端完全对齐，确保前端 token 计数与后端一致
+- **DeepSeek-V4 支持完善** — 完整支持 DSML 格式的 tool calling、thinking 模式
+
+### 修复
+
+- 修复多轮对话中 store/detect 前缀不匹配导致的 cache 命中率下降
+- 修复含图片的请求 token 计数偏低（图片 block 被忽略的问题）
+- 修复早期 assistant 的 thinking block 被错误丢弃
+
+---
+
+## v0.1 — MVP
+
+> 发布日期: 2026-06-09
+
+### 新功能
+
+- **Provider 管理** — 添加、切换、删除 AI API provider，支持自定义 API Base URL
+- **代理服务器** — 本地 Axum 代理自动改写 Claude settings，零配置对接
+- **Token 计数** — 自动统计每次请求的 input/output token 数，支持 DeepSeek 和 GPT 模型
+- **审计入库** — 每次请求的 token 用量、差异、可疑原因自动存入 SQLite
