@@ -1,10 +1,100 @@
-use crate::auditor::tokenizer::Tokenizer;
-use crate::auditor::message_converter::{ContentPart, Conversation, NormalizedMessage};
-use super::gpt::GptTokenizer;
+// SPDX-License-Identifier: Apache-2.0
+//
+// Adapted from vLLM's deepseek_v4_encoding.py
+// Original: https://github.com/vllm-project/vllm
 
-/// DeepSeek-V4 tokenizer with DSML chat template.
-/// Uses GptTokenizer for byte-pair encoding; the key difference is
-/// apply_chat_template which produces DeepSeek's DSML format.
+use crate::auditor::tokenizer::Tokenizer;
+use crate::auditor::message_converter::{Conversation, NormalizedMessage};
+use super::gpt::GptTokenizer;
+use serde_json::Value;
+
+// ============================================================
+// Special Tokens
+// ============================================================
+
+const BOS_TOKEN: &str = "<｜begin▁of▁sentence｜>";
+const EOS_TOKEN: &str = "<｜end▁of▁sentence｜>";
+const THINKING_START_TOKEN: &str = "<think>";
+const THINKING_END_TOKEN: &str = "</think>";
+const DSML_TOKEN: &str = "｜DSML｜";
+
+const USER_SP_TOKEN: &str = "<｜User｜>";
+const ASSISTANT_SP_TOKEN: &str = "<｜Assistant｜>";
+
+// ============================================================
+// Templates
+// ============================================================
+
+const SYSTEM_MSG_TEMPLATE: &str = "{content}";
+const USER_MSG_TEMPLATE: &str = "{content}";
+const ASSISTANT_MSG_TEMPLATE: &str = "{reasoning}{content}{tool_calls}";
+const THINKING_TEMPLATE: &str = "{reasoning}";
+const TOOL_OUTPUT_TEMPLATE: &str = "<tool_result>{content}</tool_result>";
+const RESPONSE_FORMAT_TEMPLATE: &str =
+    "## Response Format:\n\nYou MUST strictly adhere to the following schema to reply:\n{schema}";
+
+const REASONING_EFFORT_MAX: &str = "\
+Reasoning Effort: Absolute maximum with no shortcuts permitted.\n\
+You MUST be very thorough in your thinking and comprehensively decompose the problem to resolve the root cause, rigorously stress-testing your logic against all potential paths, edge cases, and adversarial scenarios.\n\
+Explicitly write out your entire deliberation process, documenting every intermediate step, considered alternative, and rejected hypothesis to ensure absolutely no assumption is left unchecked.\n\n";
+
+const TOOLS_TEMPLATE_PREFIX: &str = "\
+## Tools
+
+You have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<｜DSML｜tool_calls>\" block like the following:
+
+<｜DSML｜tool_calls>
+<｜DSML｜invoke name=\"$TOOL_NAME\">
+<｜DSML｜parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</｜DSML｜parameter>
+...
+</｜DSML｜invoke>
+<｜DSML｜invoke name=\"$TOOL_NAME2\">
+...
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>
+
+String parameters should be specified as is and set `string=\"true\"`. For all other types (numbers, booleans, arrays, objects), pass the value in JSON format and set `string=\"false\"`.
+
+If thinking_mode is enabled (triggered by <think>), you MUST output your complete reasoning inside <think>...</think> BEFORE any tool calls or final response.
+
+Otherwise, output directly after </think> with tool calls or final response.
+
+### Available Tool Schemas
+
+";
+
+// ============================================================
+// Internal message model — mirrors official Python dict format
+// ============================================================
+
+#[derive(Clone)]
+enum V4ContentBlock {
+    Text(String),
+    ToolResult { #[allow(dead_code)] tool_use_id: String, content: String },
+}
+
+#[derive(Clone)]
+struct V4Message {
+    role: String,
+    content: Option<String>,
+    content_blocks: Option<Vec<V4ContentBlock>>,
+    tool_calls: Option<Vec<V4ToolCall>>,
+    reasoning: Option<String>,
+    tools: Option<Vec<String>>,          // JSON-serialized tool definitions
+    response_format: Option<String>,     // JSON schema
+    wo_eos: bool,
+}
+
+#[derive(Clone)]
+struct V4ToolCall {
+    name: String,
+    arguments: String,  // JSON string
+}
+
+// ============================================================
+// DeepSeek Tokenizer
+// ============================================================
+
 pub struct DeepSeekTokenizer {
     gpt: GptTokenizer,
 }
@@ -31,205 +121,546 @@ impl Tokenizer for DeepSeekTokenizer {
     }
 
     fn render_output(&self, msg: &NormalizedMessage) -> String {
-        render_assistant_output(msg)
+        // Standalone assistant output matching official `parse_message_from_completion_text` output
+        let mut out = String::new();
+
+        if let Some(ref r) = msg.reasoning {
+            out.push_str(THINKING_START_TOKEN);
+            out.push_str(r);
+            out.push_str(THINKING_END_TOKEN);
+        }
+
+        out.push_str(&msg.content_text());
+
+        if let Some(ref tcs) = msg.tool_calls {
+            let tc_dsml: Vec<String> = tcs.iter().map(|tc| {
+                let v4_tc = V4ToolCall {
+                    name: tc.name.clone(),
+                    arguments: tc.arguments.clone(),
+                };
+                format!(
+                    "<{dsml}invoke name=\"{name}\">\n{args}\n</{dsml}invoke>",
+                    dsml = DSML_TOKEN,
+                    name = v4_tc.name,
+                    args = encode_arguments_to_dsml(&v4_tc),
+                )
+            }).collect();
+            out.push_str(&format!(
+                "\n\n<{dsml}{block}>\n{tcs}\n</{dsml}{block}>",
+                dsml = DSML_TOKEN,
+                block = "tool_calls",
+                tcs = tc_dsml.join("\n"),
+            ));
+        }
+
+        out.push_str(EOS_TOKEN);
+        out
     }
 
     fn apply_chat_template(&self, conv: &Conversation) -> String {
-        let mut messages = conv.messages.clone();
+        // Convert NormalizedMessage → V4Message
+        let mut v4_msgs: Vec<V4Message> = conv.messages.iter().map(normalized_to_v4).collect();
 
-        // 1. merge_tool_messages: fold role:"tool" back into user messages
-        messages = merge_tool_messages(messages);
+        // Merge tool messages
+        v4_msgs = merge_tool_messages(v4_msgs);
 
-        // 2. Render tool definitions
-        let tools_text = if !conv.tools.is_empty() {
-            Some(render_tools(&conv.tools))
+        // Sort tool results by preceding tool_call order
+        v4_msgs = sort_tool_results_by_call_order(v4_msgs);
+
+        // Convert tool definitions to JSON strings
+        let tool_schemas: Option<Vec<String>> = if !conv.tools.is_empty() {
+            Some(conv.tools.iter().map(|t| {
+                let mut map = serde_json::Map::new();
+                map.insert("name".into(), Value::String(t.name.clone()));
+                map.insert("description".into(), Value::String(t.description.clone()));
+                // Parse input_schema as JSON if valid, otherwise use as raw string
+                let schema_val = serde_json::from_str::<Value>(&t.input_schema)
+                    .unwrap_or(Value::String(t.input_schema.clone()));
+                map.insert("parameters".into(), schema_val);
+                Value::Object(map).to_string()
+            }).collect())
         } else {
             None
         };
 
-        // 3. Encode messages into DSML format
-        encode_messages(&messages, tools_text)
-    }
-}
-
-/// Merge role:"tool" messages into the preceding user message as <tool_result> blocks.
-/// DeepSeek-V4 has no standalone "tool" role — tool results are embedded in user messages.
-/// Tool results are placed BEFORE user text, matching Anthropic's tool_result ordering.
-///
-/// vLLM's conversion creates "tool" role messages from tool_result blocks.
-/// This function reassembles them into DSML's inline format.
-fn merge_tool_messages(messages: Vec<NormalizedMessage>) -> Vec<NormalizedMessage> {
-    let mut tool_results: Vec<Option<Vec<String>>> = vec![None; messages.len()];
-
-    let mut i = 0;
-    while i < messages.len() {
-        if messages[i].role == "tool" {
-            let tool_start = i;
-            let mut texts = Vec::new();
-            while i < messages.len() && messages[i].role == "tool" {
-                texts.push(messages[i].content_text());
-                i += 1;
-            }
-            // Assign to the PRECEDING user message (tool result belongs to the user that follows assistant's tool_use)
-            for j in (0..tool_start).rev() {
-                if messages[j].role == "user" {
-                    tool_results[j] = Some(texts);
-                    break;
+        // Attach tools to first system/developer message
+        if let Some(ref schemas) = tool_schemas {
+            if let Some(first) = v4_msgs.first_mut() {
+                if first.role == "system" || first.role == "developer" {
+                    first.tools = Some(schemas.clone());
                 }
             }
-        } else {
-            i += 1;
         }
-    }
 
-    let mut result = Vec::new();
-    for (i, msg) in messages.iter().enumerate() {
-        if msg.role == "tool" {
-            continue;
-        }
-        let mut merged = msg.clone();
-        if let Some(ref texts) = tool_results[i] {
-            // Tool results come BEFORE user text (matches Anthropic and DeepSeek format)
-            let mut new_parts = Vec::new();
-            for t in texts {
-                new_parts.push(ContentPart::Text(
-                    format!("<tool_result>{}</tool_result>\n", t),
-                ));
-            }
-            new_parts.extend(merged.content_parts.clone());
-            merged.content_parts = new_parts;
-        }
-        result.push(merged);
+        // Determine thinking_mode: "thinking" if any message has reasoning
+        let has_reasoning = v4_msgs.iter().any(|m| m.reasoning.is_some());
+        let thinking_mode = if has_reasoning { "thinking" } else { "chat" };
+
+        // Encode
+        encode_messages(
+            &v4_msgs,
+            thinking_mode,
+            &[],      // no context
+            true,     // drop_thinking (official default)
+            true,     // add_default_bos_token
+            None,     // reasoning_effort — we don't know this from the request
+        )
     }
-    result
 }
 
-/// Render tool definitions into DeepSeek DSML system prompt section.
-/// Matches vLLM's TOOLS_TEMPLATE.
-fn render_tools(tools: &[crate::auditor::message_converter::ToolDef]) -> String {
-    let dsml = "｜DSML｜";
-    let mut text = String::new();
-    text.push_str(&format!("\n\n## Tools\n\nYou have access to a set of tools to help answer the user's question. You can invoke tools by writing a \"<{dsml}tool_calls>\" block like the following:\n\n"));
-    text.push_str(&format!("<{dsml}tool_calls>\n"));
-    text.push_str(&format!("<{dsml}invoke name=\"$TOOL_NAME\">\n"));
-    text.push_str(&format!("<{dsml}parameter name=\"$PARAMETER_NAME\" string=\"true|false\">$PARAMETER_VALUE</{dsml}parameter>\n"));
-    text.push_str("...\n");
-    text.push_str(&format!("</{dsml}invoke>\n"));
-    text.push_str(&format!("</{dsml}tool_calls>\n\n"));
+// ============================================================
+// Conversion: NormalizedMessage → V4Message
+// ============================================================
 
-    text.push_str("### Available Tool Schemas\n\n");
-    for tool in tools {
-        text.push_str(&format!("{}\n", tool.input_schema));
+fn normalized_to_v4(msg: &NormalizedMessage) -> V4Message {
+    V4Message {
+        role: msg.role.clone(),
+        content: {
+            let text = msg.content_text();
+            if text.is_empty() { None } else { Some(text) }
+        },
+        content_blocks: None,  // populated by merge_tool_messages
+        tool_calls: msg.tool_calls.as_ref().map(|tcs| {
+            tcs.iter().map(|tc| V4ToolCall {
+                name: tc.name.clone(),
+                arguments: tc.arguments.clone(),
+            }).collect()
+        }),
+        reasoning: msg.reasoning.clone(),
+        tools: None,
+        response_format: None,
+        wo_eos: false,
+    }
+}
+
+// ============================================================
+// Tool call DSML encoding — matches official encode_arguments_to_dsml
+// ============================================================
+
+fn encode_arguments_to_dsml(tool_call: &V4ToolCall) -> String {
+    let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
+        .unwrap_or(Value::Object(serde_json::Map::new()));
+
+    let obj = match arguments {
+        Value::Object(ref m) => m,
+        _ => return String::new(),
+    };
+
+    let mut parts = Vec::new();
+    for (key, val) in obj {
+        let is_str = val.is_string();
+        let val_str = if is_str {
+            val.as_str().unwrap_or("").to_string()
+        } else {
+            serde_json::to_string(val).unwrap_or_default()
+        };
+        parts.push(format!(
+            "<{dsml}parameter name=\"{key}\" string=\"{is_str}\">{val}</{dsml}parameter>",
+            dsml = DSML_TOKEN,
+            key = key,
+            is_str = if is_str { "true" } else { "false" },
+            val = val_str,
+        ));
+    }
+    parts.join("\n")
+}
+
+fn encode_arguments_to_dsml_from_msg(tool_call: &V4ToolCall) -> String {
+    encode_arguments_to_dsml(tool_call)
+}
+
+// ============================================================
+// Tool rendering — matches official render_tools
+// ============================================================
+
+fn render_tools(tools: &[String]) -> String {
+    let mut text = TOOLS_TEMPLATE_PREFIX.to_string();
+    for t in tools {
+        text.push_str(t);
         text.push('\n');
     }
-
-    text.push_str(&format!("You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n"));
+    text.push_str(
+        "You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n"
+    );
     text
 }
 
-/// Encode messages into DeepSeek DSML prompt format.
-///
-/// Structured to match vLLM's deepseek_v4_encoding.encode_messages + render_message.
-///
-/// vLLM architecture:
-///   - system:  `{content}` (+ tools if first message)
-///   - user:    `<｜User｜>{content}` + transition `<｜Assistant｜><think>` or `</think>`
-///   - assistant: `{reasoning}</think>{content}{tool_calls}<｜end▁of▁sentence｜>`
-///
-/// The `<think>` before reasoning comes from the user→assistant transition,
-/// not from the assistant template itself.
-fn encode_messages(messages: &[NormalizedMessage], tools_text: Option<String>) -> String {
-    let mut prompt = String::new();
-    prompt.push_str("<｜begin▁of▁sentence｜>");
+// ============================================================
+// merge_tool_messages — matches official merge_tool_messages
+// ============================================================
 
-    for (i, msg) in messages.iter().enumerate() {
-        let content = msg.content_text();
-        match msg.role.as_str() {
-            "system" => {
-                // system_msg_template
-                prompt.push_str(&content);
-                if i == 0 {
-                    if let Some(ref t) = tools_text {
-                        prompt.push_str(t);
+fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
+    let mut merged: Vec<V4Message> = Vec::new();
+
+    for msg in messages {
+        let role = msg.role.clone();
+
+        if role == "tool" {
+            let tool_content = msg.content.clone().unwrap_or_default();
+            let tool_block = V4ContentBlock::ToolResult {
+                tool_use_id: String::new(), // tool_call_id not preserved in our V4Message; OK for template
+                content: tool_content,
+            };
+            if let Some(last) = merged.last_mut() {
+                if last.role == "user" && last.content_blocks.is_some() {
+                    last.content_blocks.as_mut().unwrap().push(tool_block);
+                } else {
+                    merged.push(V4Message {
+                        role: "user".into(),
+                        content: None,
+                        content_blocks: Some(vec![tool_block]),
+                        tool_calls: None,
+                        reasoning: None,
+                        tools: None,
+                        response_format: None,
+                        wo_eos: false,
+                    });
+                }
+            } else {
+                merged.push(V4Message {
+                    role: "user".into(),
+                    content: None,
+                    content_blocks: Some(vec![tool_block]),
+                    tool_calls: None,
+                    reasoning: None,
+                    tools: None,
+                    response_format: None,
+                    wo_eos: false,
+                });
+            }
+        } else if role == "user" {
+            let text_block = V4ContentBlock::Text(msg.content.clone().unwrap_or_default());
+            if let Some(last) = merged.last_mut() {
+                if last.role == "user" && last.content_blocks.is_some() && last.tools.is_none() {
+                    last.content_blocks.as_mut().unwrap().push(text_block);
+                } else {
+                    let mut new_msg = V4Message {
+                        role: "user".into(),
+                        content: msg.content.clone(),
+                        content_blocks: Some(vec![text_block]),
+                        tool_calls: None,
+                        reasoning: None,
+                        tools: None,
+                        response_format: None,
+                        wo_eos: false,
+                    };
+                    // Preserve extra fields
+                    if msg.wo_eos {
+                        new_msg.wo_eos = true;
                     }
+                    merged.push(new_msg);
+                }
+            } else {
+                merged.push(V4Message {
+                    role: "user".into(),
+                    content: msg.content.clone(),
+                    content_blocks: Some(vec![text_block]),
+                    tool_calls: None,
+                    reasoning: None,
+                    tools: None,
+                    response_format: None,
+                    wo_eos: false,
+                });
+            }
+        } else {
+            merged.push(msg);
+        }
+    }
+
+    merged
+}
+
+// ============================================================
+// sort_tool_results_by_call_order — matches official
+// ============================================================
+
+fn sort_tool_results_by_call_order(messages: Vec<V4Message>) -> Vec<V4Message> {
+    // Collect tool_call order from preceding assistant messages
+    // Key: tool_call name → order index
+    let mut last_tool_call_order: Vec<String> = Vec::new();
+
+    messages.into_iter().map(|mut msg| {
+        if msg.role == "assistant" {
+            if let Some(ref tcs) = msg.tool_calls {
+                last_tool_call_order = tcs.iter().map(|tc| tc.name.clone()).collect();
+            }
+        } else if msg.role == "user" {
+            if let Some(ref blocks) = msg.content_blocks {
+                let tool_blocks: Vec<usize> = blocks.iter().enumerate()
+                    .filter(|(_, b)| matches!(b, V4ContentBlock::ToolResult { .. }))
+                    .map(|(i, _)| i)
+                    .collect();
+
+                if tool_blocks.len() > 1 && !last_tool_call_order.is_empty() {
+                    let mut indexed: Vec<(usize, &V4ContentBlock)> = tool_blocks.iter()
+                        .map(|&i| (i, &blocks[i]))
+                        .collect();
+
+                    // Sort by position in last_tool_call_order (stable for unknown names)
+                    indexed.sort_by(|a, b| {
+                        let name_a = match a.1 {
+                            V4ContentBlock::ToolResult { ref content, .. } => content.clone(),
+                            _ => String::new(),
+                        };
+                        let name_b = match b.1 {
+                            V4ContentBlock::ToolResult { ref content, .. } => content.clone(),
+                            _ => String::new(),
+                        };
+                        let pos_a = last_tool_call_order.iter().position(|n| name_a.contains(n))
+                            .unwrap_or(usize::MAX);
+                        let pos_b = last_tool_call_order.iter().position(|n| name_b.contains(n))
+                            .unwrap_or(usize::MAX);
+                        pos_a.cmp(&pos_b)
+                    });
+
+                    let mut sorted_blocks = blocks.clone();
+                    for (new_pos, &(old_idx, _)) in indexed.iter().enumerate() {
+                        sorted_blocks[tool_blocks[new_pos]] = blocks[old_idx].clone();
+                    }
+                    msg.content_blocks = Some(sorted_blocks);
                 }
             }
-            "user" => {
-                // user_msg_template: <｜User｜>{content}
-                prompt.push_str("<｜User｜>");
-                prompt.push_str(&content);
+        }
+        msg
+    }).collect()
+}
 
-                // Transition: look ahead to determine if the next assistant uses thinking.
-                // vLLM: ASSISTANT_SP_TOKEN + <think> if reasoning follows, else </think>
-                let next_is_thinking = messages.get(i + 1)
-                    .map(|next| next.role == "assistant" && next.reasoning.is_some())
-                    .unwrap_or(false);
-                prompt.push_str("<｜Assistant｜>");
-                prompt.push_str(if next_is_thinking { "<think>" } else { "</think>" });
+// ============================================================
+// render_message — matches official render_message
+// ============================================================
+
+fn find_last_user_index(messages: &[V4Message]) -> isize {
+    for idx in (0..messages.len()).rev() {
+        if messages[idx].role == "user" || messages[idx].role == "developer" {
+            return idx as isize;
+        }
+    }
+    -1
+}
+
+fn render_message(
+    index: usize,
+    messages: &[V4Message],
+    thinking_mode: &str,
+    drop_thinking: bool,
+    reasoning_effort: Option<&str>,
+) -> String {
+    assert!(index < messages.len());
+    assert!(thinking_mode == "chat" || thinking_mode == "thinking");
+
+    let mut prompt = String::new();
+    let msg = &messages[index];
+    let last_user_idx = find_last_user_index(messages);
+
+    // Reasoning effort prefix (only at index 0 in thinking mode with max effort)
+    if index == 0 && thinking_mode == "thinking" && reasoning_effort == Some("max") {
+        prompt.push_str(REASONING_EFFORT_MAX);
+    }
+
+    match msg.role.as_str() {
+        "system" => {
+            let content = msg.content.as_deref().unwrap_or("");
+            prompt.push_str(&SYSTEM_MSG_TEMPLATE.replace("{content}", content));
+            if let Some(ref tools) = msg.tools {
+                prompt.push_str("\n\n");
+                prompt.push_str(&render_tools(tools));
             }
-            "assistant" => {
-                // In-conversation: <think> comes from user→assistant transition
-                prompt.push_str(&render_assistant_output_internal(msg));
+            if let Some(ref rf) = msg.response_format {
+                prompt.push_str("\n\n");
+                prompt.push_str(&RESPONSE_FORMAT_TEMPLATE.replace("{schema}", rf));
             }
-            _ => {
-                prompt.push_str(&content);
+        }
+        "developer" => {
+            let content = msg.content.as_deref().unwrap_or("");
+            let mut content_dev = USER_SP_TOKEN.to_string();
+            content_dev.push_str(content);
+            if let Some(ref tools) = msg.tools {
+                content_dev.push_str("\n\n");
+                content_dev.push_str(&render_tools(tools));
             }
+            if let Some(ref rf) = msg.response_format {
+                content_dev.push_str("\n\n");
+                content_dev.push_str(&RESPONSE_FORMAT_TEMPLATE.replace("{schema}", rf));
+            }
+            prompt.push_str(&USER_MSG_TEMPLATE.replace("{content}", &content_dev));
+        }
+        "user" => {
+            prompt.push_str(USER_SP_TOKEN);
+
+            if let Some(ref blocks) = msg.content_blocks {
+                let mut parts: Vec<String> = Vec::new();
+                for block in blocks {
+                    match block {
+                        V4ContentBlock::Text(text) => {
+                            parts.push(text.clone());
+                        }
+                        V4ContentBlock::ToolResult { content, .. } => {
+                            parts.push(TOOL_OUTPUT_TEMPLATE.replace("{content}", content));
+                        }
+                    }
+                }
+                prompt.push_str(&parts.join("\n\n"));
+            } else if let Some(ref content) = msg.content {
+                prompt.push_str(content);
+            }
+        }
+        "assistant" => {
+            let reasoning = msg.reasoning.as_deref().unwrap_or("");
+            let content = msg.content.as_deref().unwrap_or("");
+            let mut tc_content = String::new();
+
+            if let Some(ref tcs) = msg.tool_calls {
+                let tc_list: Vec<String> = tcs.iter().map(|tc| {
+                    format!(
+                        "<{dsml}invoke name=\"{name}\">\n{args}\n</{dsml}invoke>",
+                        dsml = DSML_TOKEN,
+                        name = tc.name,
+                        args = encode_arguments_to_dsml_from_msg(tc),
+                    )
+                }).collect();
+                tc_content.push_str(&format!(
+                    "\n\n<{dsml}tool_calls>\n{tcs}\n</{dsml}tool_calls>",
+                    dsml = DSML_TOKEN,
+                    tcs = tc_list.join("\n"),
+                ));
+            }
+
+            let thinking_part = if thinking_mode == "thinking" && !is_prev_task(messages, index) {
+                if !drop_thinking || index as isize > last_user_idx {
+                    THINKING_TEMPLATE.replace("{reasoning}", reasoning) + THINKING_END_TOKEN
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            let tmpl = if msg.wo_eos {
+                ASSISTANT_MSG_TEMPLATE.replace("{reasoning}", &thinking_part)
+                    .replace("{content}", content)
+                    .replace("{tool_calls}", &tc_content)
+            } else {
+                ASSISTANT_MSG_TEMPLATE.replace("{reasoning}", &thinking_part)
+                    .replace("{content}", content)
+                    .replace("{tool_calls}", &tc_content)
+                    + EOS_TOKEN
+            };
+            prompt.push_str(&tmpl);
+        }
+        _ => {
+            // Unknown role — output content as-is
+            if let Some(ref content) = msg.content {
+                prompt.push_str(content);
+            }
+        }
+    }
+
+    // Transition tokens — matches official logic
+    if index + 1 < messages.len()
+        && messages[index + 1].role != "assistant"
+        && messages[index + 1].role != "latest_reminder"
+    {
+        return prompt;
+    }
+
+    if messages[index].role == "user" || messages[index].role == "developer" {
+        prompt.push_str(ASSISTANT_SP_TOKEN);
+        if !drop_thinking && thinking_mode == "thinking" {
+            prompt.push_str(THINKING_START_TOKEN);
+        } else if drop_thinking && thinking_mode == "thinking" && (index as isize) >= last_user_idx {
+            prompt.push_str(THINKING_START_TOKEN);
+        } else {
+            prompt.push_str(THINKING_END_TOKEN);
         }
     }
 
     prompt
 }
 
-/// Render a single assistant message to DSML format (standalone).
-///
-/// Output format (thinking mode):
-///   <think>{reasoning}</think>{content}{tool_calls}<｜end▁of▁sentence｜>
-///
-/// Output format (chat mode, no reasoning):
-///   {content}{tool_calls}<｜end▁of▁sentence｜>
-///
-/// Use for standalone output token counting (post-stream audit).
-/// For in-conversation rendering, the <think> prefix comes from the
-/// user→assistant transition instead.
-pub fn render_assistant_output(msg: &NormalizedMessage) -> String {
-    render_assistant_output_internal_(msg, true)
+fn is_prev_task(_messages: &[V4Message], index: usize) -> bool {
+    if index == 0 { return false; }
+    // In the official code, `task` is a message-level field.
+    // Our messages don't have this, so always return false.
+    false
 }
 
-/// Render assistant output without the leading <think> tag.
-/// Used internally by encode_messages — <think> is provided by the
-/// user→assistant transition in the conversation.
-pub fn render_assistant_output_internal(msg: &NormalizedMessage) -> String {
-    render_assistant_output_internal_(msg, false)
-}
+// ============================================================
+// encode_messages — matches official encode_messages
+// ============================================================
 
-fn render_assistant_output_internal_(
-    msg: &NormalizedMessage,
-    add_think: bool,
+fn encode_messages(
+    messages: &[V4Message],
+    thinking_mode: &str,
+    context: &[V4Message],    // preceding context (empty for our use)
+    drop_thinking: bool,
+    add_default_bos_token: bool,
+    reasoning_effort: Option<&str>,
 ) -> String {
-    let mut out = String::new();
-    let content = msg.content_text();
+    let full_messages: Vec<V4Message> = {
+        let mut combined = context.to_vec();
+        combined.extend(messages.iter().cloned());
+        combined
+    };
 
-    if let Some(ref r) = msg.reasoning {
-        if add_think {
-            out.push_str("<think>");
-        }
-        out.push_str(r);
-        out.push_str("</think>");
+    let context_len = context.len();
+
+    // Resolve drop_thinking: if any message has tools, don't drop thinking
+    let effective_drop_thinking = if full_messages.iter().any(|m| m.tools.is_some()) {
+        false
+    } else {
+        drop_thinking
+    };
+
+    let prompt = if add_default_bos_token && context_len == 0 {
+        BOS_TOKEN.to_string()
+    } else {
+        String::new()
+    };
+
+    // Apply drop_thinking if needed
+    let (rendered_msgs, context_render_len) = if thinking_mode == "thinking" && effective_drop_thinking {
+        let dropped = drop_thinking_messages(&full_messages);
+        let dropped_context_len = drop_thinking_messages(context).len();
+        (dropped, dropped_context_len)
+    } else {
+        (full_messages, context_len)
+    };
+
+    let num_to_render = rendered_msgs.len() - context_render_len;
+
+    let mut result = prompt;
+    for idx in 0..num_to_render {
+        result.push_str(&render_message(
+            idx + context_render_len,
+            &rendered_msgs,
+            thinking_mode,
+            effective_drop_thinking,
+            reasoning_effort,
+        ));
     }
 
-    // content
-    out.push_str(&content);
+    result
+}
 
-    // tool calls (DSML)
-    if let Some(ref tcs) = msg.tool_calls {
-        for tc in tcs {
-            out.push_str(&format!(
-                "\n\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"{}\">\n<｜DSML｜parameter name=\"arguments\" string=\"true\">{}</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>",
-                tc.name, tc.arguments
-            ));
+// ============================================================
+// _drop_thinking_messages — matches official
+// ============================================================
+
+fn drop_thinking_messages(messages: &[V4Message]) -> Vec<V4Message> {
+    let last_user_idx = find_last_user_index(messages);
+    let keep_roles = ["user", "system", "tool", "latest_reminder", "direct_search_results"];
+
+    let mut result: Vec<V4Message> = Vec::new();
+    for (idx, msg) in messages.iter().enumerate() {
+        let role = msg.role.as_str();
+        if keep_roles.contains(&role) || (idx as isize) >= last_user_idx {
+            result.push(msg.clone());
+        } else if role == "assistant" {
+            let mut m = msg.clone();
+            m.reasoning = None;
+            result.push(m);
         }
+        // developer and other roles before last_user_idx are dropped
     }
-
-    out.push_str("<｜end▁of▁sentence｜>");
-    out
+    result
 }
