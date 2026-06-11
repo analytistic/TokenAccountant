@@ -36,15 +36,19 @@ async fn forward_with_audit(
     let tokenizer = state.tokenizer_factory.for_model(&detected.model);
     let audit_tokenizer = tokenizer.clone();
 
+    // Extract template params from request body
+    let template_params = crate::auditor::tokenizer::extract_template_params(&body_str);
+
     // --- 3. Spawn parallel audit task (input tokens + cache) ---
     let audit_state = state.clone();
     let audit_body = body_str.clone();
     let audit_detected_model = detected.model.clone();
     let _audit_fmt = detected.api_format;
+    let audit_params = template_params.clone();
     let audit_handle = tokio::spawn(async move {
         let (real_input, real_cached, conv, detect_text) = if let Some(ref t) = audit_tokenizer {
             let conv = crate::auditor::message_converter::from_anthropic_body(&audit_body);
-            let request_text = t.apply_chat_template(&conv);
+            let request_text = t.apply_chat_template_with(&conv, &audit_params);
             let ids = t.encode(&request_text);
             let (cached_hit, _remaining) = audit_state.cache_detector.lock().await.detect(&ids);
             let needs_prefill = ids.len() as i32 - cached_hit as i32;
@@ -100,6 +104,7 @@ async fn forward_with_audit(
                 let _audit_model_name = detected.model.clone();
                 let audit_body_str = body_str.clone();
                 let audit_tokenizer = tokenizer.clone();
+                let audit_params = template_params.clone();
                 tokio::spawn(async move {
                     // Wait for the streamed response to be fully consumed
                     while !forwarder.stream_ended.load(std::sync::atomic::Ordering::SeqCst) {
@@ -132,7 +137,7 @@ async fn forward_with_audit(
                         store_msg.reasoning = None;
                         let mut full_conv = conv.clone();
                         full_conv.messages.push(store_msg);
-                        let store_text = t.apply_chat_template(&full_conv);
+                        let store_text = t.apply_chat_template_with(&full_conv, &audit_params);
                         let ids = t.encode(&store_text);
                         audit_state.cache_detector.lock().await.store_combined(&ids);
 

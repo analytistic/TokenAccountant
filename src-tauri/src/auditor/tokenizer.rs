@@ -2,6 +2,27 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use super::message_converter::{Conversation, NormalizedMessage};
 
+/// Optional parameters for chat template rendering,
+/// matching vLLM's `encode_messages` parameter set.
+///
+/// Tokenizers that don't need these (GPT, Claude) ignore them via the
+/// default `apply_chat_template_with` implementation.
+#[derive(Debug, Clone, Default)]
+pub struct TemplateParams {
+    /// "thinking" or "chat" — DeepSeek-V4 thinking mode.
+    /// Default: None (tokenizer-specific default, e.g. "thinking" for DeepSeek)
+    pub thinking_mode: Option<String>,
+    /// Drop reasoning from earlier assistant turns before the last user message.
+    /// Default: None (tokenizer-specific default, e.g. true for DeepSeek)
+    pub drop_thinking: Option<bool>,
+    /// Add BOS token at conversation start.
+    /// Default: None (tokenizer-specific default, e.g. true for DeepSeek)
+    pub add_default_bos_token: Option<bool>,
+    /// Reasoning effort level: "max", "high".
+    /// Default: None (means no effort prefix)
+    pub reasoning_effort: Option<String>,
+}
+
 pub trait Tokenizer: Send + Sync {
     fn encode(&self, text: &str) -> Vec<u32>;
     fn decode(&self, ids: &[u32]) -> String;
@@ -11,9 +32,50 @@ pub trait Tokenizer: Send + Sync {
     /// Apply model-specific chat template to a Conversation.
     /// Output is the formatted prompt string ready for tokenization.
     fn apply_chat_template(&self, conv: &Conversation) -> String;
+    /// Apply chat template with optional parameters.
+    ///
+    /// The default implementation ignores `params` and delegates to
+    /// `apply_chat_template`. Tokenizers that need these parameters
+    /// (e.g. DeepSeek-V4) override this method.
+    fn apply_chat_template_with(
+        &self,
+        conv: &Conversation,
+        _params: &TemplateParams,
+    ) -> String {
+        self.apply_chat_template(conv)
+    }
     /// Render a single assistant output message to model-specific format.
     /// Used for accurate output token counting (not raw SSE text).
     fn render_output(&self, msg: &NormalizedMessage) -> String;
+}
+
+/// Extract TemplateParams from an Anthropic Messages API request body.
+///
+/// This is a standalone helper, not part of message_converter — message
+/// conversion is only about messages, not renderer parameters.
+pub fn extract_template_params(body_str: &str) -> TemplateParams {
+    let Ok(body_val) = serde_json::from_str::<serde_json::Value>(body_str) else {
+        return TemplateParams::default();
+    };
+
+    // thinking_mode: if "thinking" field exists with type "enabled"
+    let thinking_mode = body_val.get("thinking")
+        .and_then(|t| t.get("type").and_then(|v| v.as_str()))
+        .filter(|&t| t == "enabled")
+        .map(|_| "thinking".to_string());
+
+    // reasoning_effort: from output_config.effort
+    let reasoning_effort = body_val.get("output_config")
+        .and_then(|oc| oc.get("effort"))
+        .and_then(|e| e.as_str())
+        .map(|s| s.to_string());
+
+    TemplateParams {
+        thinking_mode,
+        drop_thinking: None,   // DeepSeek default: true
+        add_default_bos_token: None,  // DeepSeek default: true
+        reasoning_effort,
+    }
 }
 
 pub struct TokenizerFactory {

@@ -5,6 +5,7 @@
 
 use crate::auditor::tokenizer::Tokenizer;
 use crate::auditor::message_converter::{Conversation, NormalizedMessage};
+use crate::auditor::tokenizer::TemplateParams;
 use super::gpt::GptTokenizer;
 use serde_json::Value;
 
@@ -158,6 +159,10 @@ impl Tokenizer for DeepSeekTokenizer {
     }
 
     fn apply_chat_template(&self, conv: &Conversation) -> String {
+        self.apply_chat_template_with(conv, &TemplateParams::default())
+    }
+
+    fn apply_chat_template_with(&self, conv: &Conversation, params: &TemplateParams) -> String {
         // Convert NormalizedMessage → V4Message
         let mut v4_msgs: Vec<V4Message> = conv.messages.iter().map(normalized_to_v4).collect();
 
@@ -192,18 +197,20 @@ impl Tokenizer for DeepSeekTokenizer {
             }
         }
 
-        // Determine thinking_mode: "thinking" if any message has reasoning
-        let has_reasoning = v4_msgs.iter().any(|m| m.reasoning.is_some());
-        let thinking_mode = if has_reasoning { "thinking" } else { "chat" };
+        // Resolve params with DeepSeek defaults
+        let thinking_mode = params.thinking_mode.as_deref().unwrap_or("thinking");
+        let drop_thinking = params.drop_thinking.unwrap_or(true);
+        let add_default_bos_token = params.add_default_bos_token.unwrap_or(true);
+        let reasoning_effort = params.reasoning_effort.as_deref();
 
         // Encode
         encode_messages(
             &v4_msgs,
             thinking_mode,
-            &[],      // no context
-            true,     // drop_thinking (official default)
-            true,     // add_default_bos_token
-            None,     // reasoning_effort — we don't know this from the request
+            &[],       // no context
+            drop_thinking,
+            add_default_bos_token,
+            reasoning_effort,
         )
     }
 }
