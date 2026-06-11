@@ -41,19 +41,19 @@ async fn forward_with_audit(
     let audit_detected_model = detected.model.clone();
     let _audit_fmt = detected.api_format;
     let audit_handle = tokio::spawn(async move {
-        let (real_input, real_cached, conv) = if let Some(ref t) = audit_tokenizer {
+        let (real_input, real_cached, conv, detect_text) = if let Some(ref t) = audit_tokenizer {
             let conv = crate::auditor::message_converter::from_anthropic_body(&audit_body);
             let request_text = t.apply_chat_template(&conv);
             let ids = t.encode(&request_text);
             let (cached_hit, _) = audit_state.cache_detector.lock().await.detect(&ids);
             let needs_prefill = ids.len() as i32 - cached_hit as i32;
-            (needs_prefill, cached_hit as i32, conv)
+            (needs_prefill, cached_hit as i32, conv, request_text)
         } else {
             (0, 0, crate::auditor::message_converter::Conversation {
                 messages: vec![], tools: vec![],
-            })
+            }, String::new())
         };
-        (real_input, real_cached, audit_detected_model, conv)
+        (real_input, real_cached, audit_detected_model, conv, detect_text)
     });
 
     // --- 4. Build upstream URL and headers ---
@@ -108,8 +108,8 @@ async fn forward_with_audit(
 
                     let audit_result = audit_handle.await.unwrap_or((0, 0, String::new(), crate::auditor::message_converter::Conversation {
                         messages: vec![], tools: vec![],
-                    }));
-                    let (real_input, real_cached, model_name, conv) = audit_result;
+                    }, String::new()));
+                    let (real_input, real_cached, model_name, conv, detect_text) = audit_result;
 
                     // Build structured output and count tokens properly
                     let output_msg = forwarder.build_output().await;
@@ -122,9 +122,16 @@ async fn forward_with_audit(
                     if let Some(ref t) = audit_tokenizer {
                         let mut full_conv = conv.clone();
                         full_conv.messages.push(output_msg);
-                        let rendered = t.apply_chat_template(&full_conv);
-                        let ids = t.encode(&rendered);
+                        let store_text = t.apply_chat_template(&full_conv);
+                        let ids = t.encode(&store_text);
                         audit_state.cache_detector.lock().await.store_combined(&ids);
+
+                        // Capture store/detect text for DevTraceBuffer
+                        audit_state.dev_trace_buffer.lock().await.push(
+                            model_name.clone(),
+                            detect_text.clone(),
+                            store_text,
+                        );
                     }
 
                     let record = audit_state.diff_comparator.compare(
