@@ -64,13 +64,23 @@
 - `real_input = needs_prefill` — 匹配上游 API 语义
 - `Cargo.toml` 依赖对齐
 
+### ✅ 2026-06-11 新增完成
+
+| 改动 | 说明 |
+|------|------|
+| **message_converter 重写** | `ContentPart` 枚举（Text / ImageUrl / ToolReference）、`content_parts: Vec<ContentPart>` 替代 `content: String`、`tool_call_id` 字段、处理所有系统消息（不限于第一个）、image block → data URI、redacted_thinking 静默跳过、tool_result 子结构（text + image + tool_reference） |
+| **vLLM `deepseek_v4_encoding.py` 完全对齐** | per-parameter DSML tool call 编码、`content_blocks` 格式的 `merge_tool_messages`、`sort_tool_results_by_call_order`、`_drop_thinking_messages`、`reasoning_effort='max'` 前缀、developer role / response_format / wo_eos 支持 |
+| **`TemplateParams` 参数化** | `thinking_mode`、`drop_thinking`、`add_default_bos_token`、`reasoning_effort` 通过 `apply_chat_template_with()` 传入，`extract_template_params()` 从请求体提取 |
+| **Render Inspector DevPanel** | `DevTraceBuffer` 环形缓冲区、`list_dev_traces` / `clear_dev_traces` IPC、`DevPanel.tsx` 组件、开发者模式开关、深色主题左右布局 |
+| **Store 保留 reasoning** | 去掉 `store_msg.reasoning = None`，Claude Code 回传完整 thinking blocks，store 必须保留以匹配 detect 前缀 |
+
 ### 🔲 待办
 
 | ID | 内容 | 优先级 |
 |----|------|--------|
-| **A** | 验证 store 与 detect 一致性（info拼接 + apply_chat_template 对齐） | 高 |
-| **B** | Cache hit 精度改进（TTL 淘汰 / vLLM 精确 block hash 模拟） | 中 |
-| **C** | 完善单元测试 | 中 |
+| **A** | Cache hit 精度改进（TTL 淘汰 / vLLM 精确 block hash 模拟） | 中 |
+| **B** | 完善单元测试（message_converter / deepseek tokenizer） | 中 |
+| **C** | 非 Claude Code client 兼容性验证 | 低 |
 
 ---
 
