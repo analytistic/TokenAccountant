@@ -143,6 +143,113 @@ pub struct ProxyState {
 
 ---
 
+## 8. Rendering Inspector 开发者面板
+
+> 开发模式工具。纯函数 + DevTraceBuffer，不耦合 proxy handler 核心逻辑。
+
+### 目标
+
+验证 store 阶段拼接 prefill + decode 后的渲染结果，与下一次 detect 阶段 client 回传的对话历史的渲染结果，在 transition token 边界处保持一致——从而保证 block hash chain 前缀匹配，prefix cache 生效。
+
+### 问题背景
+
+Proxy 的 store/detect 流程：
+
+```
+Turn N:
+  detect:  request body → from_anthropic_body → conv → render → encode → cache.detect
+  store:   conv + output_msg → render → encode → cache.store_combined
+                                    ↑
+                            拼接 prefill 和 decode 后的完整对话
+
+Turn N+1:
+  detect:  request body(含 Turn N 的 assistant msg)
+           → from_anthropic_body → conv → render → encode → cache.detect
+                                    ↑
+                     client 回传的对话历史，应该与 store 的前缀一致
+```
+
+关键验证点：Turn N store 的渲染结果（conv + assistant output，含 transition token 如 `<｜Assistant｜>`, `<think>`, `</think>`, `<｜end▁of▁sentence｜>` 等）必须是 Turn N+1 detect 渲染结果的前缀。
+
+如果 store 拼接 prefill 和 decode 时边界处理有误（如 transition token 重复、缺失、顺序错乱），会导致 block hash chain 在前几个 block 之后断掉，prefix cache 命中率为 0。
+
+### 架构
+
+proxy handler 中捕获，App 内开发者面板展示：
+
+```
+proxy handler（开发者模式开启时）:
+  detect:  body → from_anthropic_body → apply_chat_template → detect_text
+  store:   conv + output_msg → apply_chat_template → store_text
+                ↓
+         写入 DevTraceBuffer（环形缓冲区，最多 100 轮）
+                ↓
+IPC: list_dev_traces() → Vec<DevTrace { turn, model, detect_text, store_text }>
+                ↓
+         前端 DevPanel 组件展示
+```
+
+`inspect_detect` / `inspect_store` 是与 proxy handler 解耦的纯函数，只在 handler 中被调用，不感知 Tauri、IPC、前端。
+
+### 使用方式
+
+入口暂定设置页加一个"开发者模式"开关。
+
+打开后，请求列表页右侧出现一个开发者面板，展示当前选中请求的 detect 和 store 展平文本：
+
+```
+┌──────────────────────────────────┬────────────────────────────┐
+│                                  │  开发者面板                │
+│         请求列表                  │  ┌─ Store 展平 ────────┐  │
+│                                  │  │ <｜begin▁of▁sentence│  │
+│  请求 1  ← 选中                  │  │ ｜>You are...        │  │
+│  请求 2                          │  │ <｜User｜>Hello!      │  │
+│  请求 3                          │  │ ...                  │  │
+│                                  │  └──────────────────────┘  │
+│                                  │  ┌─ Detect 展平 ──────┐  │
+│                                  │  │ <｜begin▁of▁sentence│  │
+│                                  │  ｜>You are...          │  │
+│                                  │  │ <｜User｜>Hello!      │  │
+│                                  │  │ ...                  │  │
+│                                  │  └──────────────────────┘  │
+└──────────────────────────────────┴────────────────────────────┘
+```
+
+展示的内容只有 `apply_chat_template` 产出的纯文本，无额外 JSON 或 metadata。
+
+### 文本展示要求
+
+- 每个文本框独立滚动（文本可能很长）
+- Cmd+/- 调整字号
+- 系统等宽字体（SF Mono 或等宽 fallback）
+- 设计简洁，不需要额外 UI 库
+
+### 验证方式
+
+不加断言。开发者肉眼对比两份文本在 transition token 边界处（`<｜Assistant｜>`、`<think>`、`</think>`、`<｜end▁of▁sentence｜>` 等）是否吻合。
+
+### 文件（后端相关）
+
+- 新建 `src-tauri/src/auditor/render_inspector.rs` — DevTrace、DevTraceBuffer、inspect_detect、inspect_store
+- 修改 `src-tauri/src/proxy/handlers/claude.rs` — 开发者模式时调用 inspect_detect / inspect_store
+- 修改 `src-tauri/src/proxy/handlers/openai.rs` — 同上
+- 修改 `src-tauri/src/proxy/server.rs` — ProxyState 增加 DevTraceBuffer
+- 修改 `src-tauri/src/api/commands.rs` — 新增 list_dev_traces IPC
+- 修改 `src-tauri/src/lib.rs` — 初始化 DevTraceBuffer 并注入
+
+### 前端组件
+
+新增 `DevPanel` 组件，放在请求列表页右侧。
+
+- 选中不同请求时显示对应的 trace
+- 每个 trace 展示两个文本框：Store 展平、Detect 展平
+- 带 model 标签
+- 纯文本，无高亮
+- 独立滚动容器
+- Cmd+/- 缩放字号
+
+---
+
 ## 验收标准
 
 1. 用 Claude Code 发消息后，SQLite 中有对应的审计记录
