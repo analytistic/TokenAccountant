@@ -130,13 +130,11 @@ async fn forward_with_audit(
                     // Store: re-render full conversation WITH the new assistant message,
                     // so cached block hashes match the next request's prompt prefix exactly.
                     if let Some(ref t) = audit_tokenizer {
-                        // Clone output_msg WITHOUT reasoning to match what the
-                        // client will actually send in the next request (thinking
-                        // blocks are typically stripped from conversation history).
-                        let mut store_msg = output_msg.clone();
-                        store_msg.reasoning = None;
+                        // Keep output_msg as-is — reasoning (thinking blocks) is
+                        // preserved because the client echoes it back in subsequent
+                        // requests. The store text must match the detect text prefix.
                         let mut full_conv = conv.clone();
-                        full_conv.messages.push(store_msg);
+                        full_conv.messages.push(output_msg.clone());
                         let store_text = t.apply_chat_template_with(&full_conv, &audit_params);
                         let ids = t.encode(&store_text);
                         audit_state.cache_detector.lock().await.store_combined(&ids);
