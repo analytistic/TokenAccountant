@@ -37,31 +37,34 @@ export default function TodayOverview({ summary, modelBreakdown }: TodayOverview
         </div>
       </div>
 
-      {/* I/C/O diff rates */}
-      <div className="flex flex-col gap-2 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
-            <span className="w-2 h-2 rounded-sm bg-ico-input" /> Input
-          </span>
-          {diffDisplay(summary.input_diff_rate, summary.input_diff_tokens)}
+      {/* Body: left = I/C/O rates, right = pie chart */}
+      <div className="flex items-center gap-4 px-4 py-3">
+        {/* Left: diff rates */}
+        <div className="flex flex-col gap-2 flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-2 h-2 rounded-sm bg-ico-input" /> Input
+            </span>
+            {diffDisplay(summary.input_diff_rate, summary.input_diff_tokens)}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-2 h-2 rounded-sm bg-ico-cache" /> Cache
+            </span>
+            {diffDisplay(summary.cache_diff_rate, summary.cache_diff_tokens)}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-2 h-2 rounded-sm bg-ico-output" /> Output
+            </span>
+            {diffDisplay(summary.output_diff_rate, summary.output_diff_tokens)}
+          </div>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
-            <span className="w-2 h-2 rounded-sm bg-ico-cache" /> Cache
-          </span>
-          {diffDisplay(summary.cache_diff_rate, summary.cache_diff_tokens)}
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
-            <span className="w-2 h-2 rounded-sm bg-ico-output" /> Output
-          </span>
-          {diffDisplay(summary.output_diff_rate, summary.output_diff_tokens)}
-        </div>
-      </div>
 
-      {/* Pie chart */}
-      <div className="px-4 py-2 border-t border-gray-100">
-        <ModelPieChart data={modelBreakdown} />
+        {/* Right: pie chart */}
+        <div className="shrink-0">
+          <ModelPieChart data={modelBreakdown} />
+        </div>
       </div>
     </div>
   );
