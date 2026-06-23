@@ -71,8 +71,8 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         <g key={i}>
           <line x1={PAD.left} y1={toY(v)} x2={VW - PAD.right} y2={toY(v)}
             stroke="var(--gray-300)" strokeWidth="0.5" />
-          <text x={PAD.left - 8} y={toY(v) + 5}
-            fill="var(--gray-500)" fontSize="12" fontWeight="500" textAnchor="end">
+          <text x={PAD.left - 8} y={toY(v) + 6}
+            fill="var(--gray-500)" fontSize="14" fontWeight="500" textAnchor="end">
             {fmtY(v)}
           </text>
         </g>
@@ -131,7 +131,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const x0 = PAD.left + gi * groupW + groupW / 2;
         return (
           <text key={gi} x={x0} y={VH - 4}
-            fill="var(--gray-600)" fontSize="12" fontWeight="500" textAnchor="middle">
+            fill="var(--gray-600)" fontSize="14" fontWeight="500" textAnchor="middle">
             {g.day}
           </text>
         );
@@ -145,16 +145,16 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const x0 = PAD.left + hovered.dayIdx * groupW + groupW / 2;
         const icoIdx = icoKeys.indexOf(hovered.ico as typeof icoKeys[number]);
         const barCenterX = x0 + (icoIdx - 1) * (barW + gap);
-        const tW = 160, tH = 48;
+        const tW = 200, tH = 56;
         const tx = Math.min(Math.max(barCenterX - tW / 2, 2), VW - tW - 2);
         return (
           <g>
-            <rect x={tx} y={4} width={tW} height={tH} rx={6}
+            <rect x={tx} y={2} width={tW} height={tH} rx={6}
               fill="var(--gray-900)" fillOpacity={0.9} />
-            <text x={tx + tW / 2} y={22} fill="white" fontSize="16" textAnchor="middle" fontWeight="700">
+            <text x={tx + tW / 2} y={24} fill="white" fontSize="20" textAnchor="middle" fontWeight="700">
               {icoKey.toUpperCase()}
             </text>
-            <text x={tx + tW / 2} y={42} fill="var(--gray-300)" fontSize="14" textAnchor="middle">
+            <text x={tx + tW / 2} y={48} fill="var(--gray-300)" fontSize="16" textAnchor="middle">
               审计 {formatK(v.audit)} · 声称 {formatK(v.claimed)}
             </text>
           </g>
