@@ -53,14 +53,14 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   const maxVal = Math.max(...allVals, 1);
   const yMax = Math.ceil(maxVal / 1000) * 1000 || 1000;
 
-  const padding = { top: 8, right: 8, bottom: 24, left: 34 };
+  const padding = { top: 4, right: 4, bottom: 22, left: 28 };
   const svgW = 500, svgH = 200;
   const chartW = svgW - padding.left - padding.right;
   const chartH = svgH - padding.top - padding.bottom;
 
   const groupW = chartW / groups.length;
-  const barW = groupW * 0.20;
-  const gap = groupW * 0.03;
+  const barW = groupW * 0.23;
+  const gap = groupW * 0.04;
 
   const toY = (v: number) => padding.top + chartH - (v / yMax) * chartH;
 
