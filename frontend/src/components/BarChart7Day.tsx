@@ -151,10 +151,10 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
           <g>
             <rect x={tx} y={4} width={tW} height={tH} rx={6}
               fill="var(--gray-900)" fillOpacity={0.9} />
-            <text x={tx + tW / 2} y={19} fill="white" fontSize="11" textAnchor="middle" fontWeight="700">
+            <text x={tx + tW / 2} y={20} fill="white" fontSize="14" textAnchor="middle" fontWeight="700">
               {icoKey.toUpperCase()}
             </text>
-            <text x={tx + tW / 2} y={35} fill="var(--gray-300)" fontSize="10" textAnchor="middle">
+            <text x={tx + tW / 2} y={36} fill="var(--gray-300)" fontSize="12" textAnchor="middle">
               审计 {formatK(v.audit)} · 声称 {formatK(v.claimed)}
             </text>
           </g>
