@@ -85,7 +85,7 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
     <div className="sub-chart flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between h-[14px] shrink-0 px-0.5">
-        <span className="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color }}>
+        <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color }}>
           <span className="inline-block w-[5px] h-[5px] rounded-[1.5px] shrink-0" style={{ backgroundColor: color }} />
           {label}
         </span>
@@ -99,7 +99,7 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
             <line x1={padding.left} y1={t.y} x2={width - padding.right + 4} y2={t.y}
               stroke="var(--gray-200)" strokeWidth="0.5" />
             <text x={width - padding.right + 8} y={t.y + 3}
-              fill="var(--gray-400)" fontSize="8" textAnchor="start">
+              fill="var(--gray-400)" fontSize="9" textAnchor="start">
               {t.label >= 1000 ? `${(t.label / 1000).toFixed(0)}K` : String(Math.round(t.label))}
             </text>
           </g>
@@ -121,9 +121,9 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
       {/* Diff rate badge */}
       <div className="shrink-0 h-5 flex items-center justify-end px-1">
         {allZero ? (
-          <span className="text-[10px] text-gray-400">暂无趋势数据</span>
+          <span className="text-[11px] text-gray-400">暂无趋势数据</span>
         ) : (
-          <span className="text-xs font-bold font-mono" style={{ color: diffColor }}>
+          <span className="text-sm font-bold font-mono" style={{ color: diffColor }}>
             {diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%
           </span>
         )}
@@ -166,13 +166,13 @@ export default function TrendChart({ data }: TrendChartProps) {
       ))}
       {/* Legend */}
       <div className="flex items-center justify-center gap-6 shrink-0 pb-1">
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
           <span className="inline-block w-3 h-[2px] rounded bg-current" /> 审计值（基准）
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
           <span className="inline-block w-3 h-[1px] rounded border border-dashed border-current" /> 声称值
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
           <span className="inline-block w-3 h-2 rounded-sm bg-black/10" /> 差值区域
         </span>
       </div>
