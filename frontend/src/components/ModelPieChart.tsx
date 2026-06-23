@@ -145,12 +145,10 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
             onMouseLeave={() => setDimIdx(null)}
           >
             <span className="w-2.5 h-2.5 rounded-sm shrink-0 mt-0.5" style={{ backgroundColor: m.color }} />
-            <div className="flex-1 min-w-0">
-              <span className="text-gray-800 font-medium">{m.name}</span>
-              <div className="flex gap-3 text-[10px] mt-0.5">
-                <span className="font-mono text-gray-500">审计 {formatK(m.audit)}</span>
-                <span className="font-mono text-gray-400">声称 {formatK(m.claimed)}</span>
-              </div>
+            <span className="text-gray-800 font-medium flex-1 min-w-0">{m.name}</span>
+            <div className="flex flex-col text-[10px] shrink-0 text-right">
+              <span className="font-mono text-gray-500">审计 {formatK(m.audit)}</span>
+              <span className="font-mono text-gray-400">声称 {formatK(m.claimed)}</span>
             </div>
           </div>
         ))}
