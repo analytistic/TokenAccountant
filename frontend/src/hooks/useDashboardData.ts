@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { DashboardData, TrendPoint } from "../types";
@@ -13,27 +13,23 @@ export default function useDashboardData() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const isFirstLoad = useRef(true);
 
   const fetchData = useCallback(async (isEvent: boolean) => {
     try {
       const data = await invoke<DashboardData>("get_dashboard_data");
 
       setDashboardData((prev) => {
-        if (!prev) {
-          // Initial load: strip current_audit, wait for event
-          data.current_audit = null;
-        }
-        return data;
+        // Initial load: strip current_audit (prev is null on first call)
+        const isFirstRender = !prev;
+        return {
+          ...data,
+          current_audit: isFirstRender ? null : data.current_audit,
+        };
       });
 
-      // Only push trend point on event-triggered or manual refresh (not initial load)
-      if (!isFirstLoad.current && data.latest_trend_point) {
+      // Only push trend point on events or manual refresh
+      if (isEvent && data.latest_trend_point) {
         setTrendQueue((prev) => [...prev.slice(1), data.latest_trend_point!]);
-      }
-
-      if (isFirstLoad.current) {
-        isFirstLoad.current = false;
       }
 
       setError(null);
@@ -45,7 +41,7 @@ export default function useDashboardData() {
   }, []);
 
   useEffect(() => {
-    // Initial load — don't push trend point
+    // Initial load — no trend push
     fetchData(false);
 
     // Listen for audit-tick events — push trend point
@@ -62,7 +58,6 @@ export default function useDashboardData() {
     };
   }, [fetchData]);
 
-  // Manual refresh: pushes trend point
   const refresh = useCallback(() => {
     fetchData(true);
   }, [fetchData]);
