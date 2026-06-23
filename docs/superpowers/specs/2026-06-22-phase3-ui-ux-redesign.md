@@ -177,7 +177,23 @@ setQueue(prev => [...prev.slice(1), latest])
 - 切换 Provider 后如果代理还在运行，新请求会转发到旧的 Provider
 - 防止用户忘记停代理就直接切换造成混乱
 
-### 7. 开发者模式作为条件路由
+### 7. Claude Settings 同步策略
+
+**决策**：Provider 的 URL 和 API Key 是 `~/.claude/settings.json` 的 baseline。选 Provider 时立即写入，代理启停只切换 URL。
+
+```
+选/切 Provider → write_claude_settings(provider_url, provider_api_key)
+启动代理       → write_claude_settings("http://localhost:{port}", api_key)
+停止代理       → write_claude_settings(provider_url, api_key)
+```
+
+**理由：**
+- Provider URL 是持久配置，不是"启动代理时才写入"
+- 不需要 save/restore `original_env` 机制 —— Provider 的 URL 本身就是正确的回退值
+- 用户停止代理后，Claude Code 直接走 Provider URL（不经本地代理），继续正常使用
+- 切换 Provider 时自动停代理 → 写新 Provider URL，逻辑一致
+
+### 8. 开发者模式作为条件路由
 
 **决策**：Settings 页面的开发者模式开关控制导航栏是否显示 Dev 页面。
 
