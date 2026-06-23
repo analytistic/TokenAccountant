@@ -68,9 +68,9 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
   const formatK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex items-center gap-3">
       {/* Pie SVG */}
-      <svg className="w-[120px] h-[120px]" viewBox="0 0 100 100">
+      <svg className="w-[100px] h-[100px] shrink-0" viewBox="0 0 100 100">
         <g transform={`rotate(-90 ${CX} ${CY})`}>
           {sectors.reduce<React.ReactNode[]>((acc, m, i) => {
             let startAngle = 0;
@@ -134,8 +134,8 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
         <circle cx={CX} cy={CY} r={4} fill="white" />
       </svg>
 
-      {/* Legend */}
-      <div className="flex flex-col gap-0.5 mt-2 w-full">
+      {/* Legend + caption on the right */}
+      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
         {sectors.map((m, i) => (
           <div
             key={i}
@@ -150,8 +150,8 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
             <span className="font-mono text-gray-400 tabular-nums">声称 {formatK(m.claimed)}</span>
           </div>
         ))}
+        <p className="text-[10px] text-gray-400">实心=审计占比 · 半透明外环=声称多出部分</p>
       </div>
-      <p className="text-[10px] text-gray-400 mt-1">实心=审计占比 · 半透明外环=声称多出部分</p>
     </div>
   );
 }
