@@ -19,24 +19,28 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
   const { sectors, total } = useMemo(() => {
     if (!data.length) return { sectors: [], total: 0 };
 
-    // Sort by audit total desc
-    const sorted = [...data].sort((a, b) =>
-      (b.input_total + b.cache_total + b.output_total) -
-      (a.input_total + a.cache_total + a.output_total)
-    );
+    // Filter zero-audit, sort by audit total desc
+    const filtered = data
+      .map(m => ({
+        model: m.model,
+        audit: m.input_total + m.cache_total + m.output_total,
+        claimed: m.input_claimed_total + m.cache_claimed_total + m.output_claimed_total,
+      }))
+      .filter(m => m.audit > 0)
+      .sort((a, b) => b.audit - a.audit);
 
-    const top = sorted.slice(0, MAX_SECTORS).map((m, i) => ({
+    const top = filtered.slice(0, MAX_SECTORS).map((m, i) => ({
       name: m.model,
-      audit: m.input_total + m.cache_total + m.output_total,
-      claimed: m.input_claimed_total + m.cache_claimed_total + m.output_claimed_total,
+      audit: m.audit,
+      claimed: m.claimed,
       color: PALETTE[i % PALETTE.length],
     }));
 
     // Aggregate remaining into "Other"
-    if (sorted.length > MAX_SECTORS) {
-      const rest = sorted.slice(MAX_SECTORS);
-      const otherAudit = rest.reduce((s, m) => s + m.input_total + m.cache_total + m.output_total, 0);
-      const otherClaimed = rest.reduce((s, m) => s + m.input_claimed_total + m.cache_claimed_total + m.output_claimed_total, 0);
+    if (filtered.length > MAX_SECTORS) {
+      const rest = filtered.slice(MAX_SECTORS);
+      const otherAudit = rest.reduce((s, m) => s + m.audit, 0);
+      const otherClaimed = rest.reduce((s, m) => s + m.claimed, 0);
       if (otherAudit > 0) {
         top.push({ name: "Other", audit: otherAudit, claimed: otherClaimed, color: "#9CA3AF" });
       }
