@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TokenAccountant v0.3 — UI Prototype v2</title>
+<style>
+:root {
+  --brand: #4F46E5;
+  --brand-light: #6366F1;
+  --success: #059669;
+  --warning: #D97706;
+  --danger: #DC2626;
+  --gray-0: #FFFFFF;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-600: #4B5563;
+  --gray-700: #374151;
+  --gray-800: #1F2937;
+  --gray-900: #111827;
+  --ico-input: #60A5FA;
+  --ico-cache: #FB923C;
+  --ico-output: #34D399;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.06), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+  --shadow-modal: 0 25px 50px -12px rgba(0,0,0,0.2);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { -webkit-font-smoothing:antialiased; }
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  overflow: hidden;
+}
+button { font-family:inherit; cursor:pointer; border:none; background:none; font-size:inherit; }
+a { color:inherit; text-decoration:none; }
+::-webkit-scrollbar { width:5px; }
+::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius:10px; }
+
+/* Layout */
+.app-shell { display:flex; height:100vh; width:100vw; }
+
+/* Sidebar */
+.sidebar {
+  width:220px; min-width:220px; height:100vh;
+  background: var(--gray-0);
+  border-right:1px solid var(--gray-200);
+  display:flex; flex-direction:column;
+  flex-shrink:0; z-index:50;
+}
+.sidebar-brand {
+  padding:24px 20px;
+  display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid var(--gray-100);
+}
+.sidebar-brand-icon {
+  width:34px; height:34px;
+  border-radius:var(--radius-md);
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  display:flex; align-items:center; justify-content:center;
+  color:#FFF; flex-shrink:0;
+}
+.sidebar-brand-text {
+  font-size:15px; font-weight:700; color:var(--gray-900);
+  letter-spacing:-0.02em; line-height:1.2;
+}
+.sidebar-brand-version { font-size:10px; color:var(--gray-400); font-weight:500; }
+.sidebar-nav {
+  flex:1; padding:12px;
+  display:flex; flex-direction:column; gap:2px;
+  overflow-y:auto;
+}
+.nav-item {
+  display:flex; align-items:center; gap:12px;
+  padding:8px 12px; border-radius:var(--radius-sm);
+  font-size:13px; font-weight:500; color:var(--gray-500);
+  transition:all 150ms var(--ease-out);
+  min-height:36px; position:relative;
+}
+.nav-item:hover { background:var(--gray-100); color:var(--gray-800); }
+.nav-item.active {
+  background:rgba(79,70,229,0.06); color:var(--brand);
+}
+.nav-item.active::before {
+  content:''; position:absolute; left:0; top:8px; bottom:8px;
+  width:3px; background:var(--brand); border-radius:0 2px 2px 0;
+}
+.nav-item-icon { width:18px; height:18px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+/* Dev nav item (hidden by default) */
+.nav-item.dev { display:none; }
+
+/* Sidebar Proxy Button */
+.sidebar-footer { padding:12px; border-top:1px solid var(--gray-100); }
+.proxy-btn {
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; padding:8px 12px;
+  border-radius:var(--radius-sm); min-height:36px;
+  font-size:13px; font-weight:600;
+  transition:all 150ms var(--ease-out);
+  color:white;
+}
+.proxy-btn.running { background:var(--success); box-shadow:0 1px 2px rgba(5,150,105,0.2); }
+.proxy-btn.running:hover { background:#047857; }
+.proxy-btn.stopped { background:var(--gray-300); color:var(--gray-600); }
+.proxy-btn.stopped:hover { background:var(--gray-400); }
+.proxy-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+.proxy-dot.running { animation:pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+.proxy-timer { font-family:var(--font-mono); font-size:13px; font-weight:600; letter-spacing:0.04em; }
+
+/* Main */
+.main-content { flex:1; overflow:hidden; min-width:0; display:flex; flex-direction:column; }
+.page { display:none; padding:24px 32px; }
+.page.active { display:block; }
+.page-flex.active { display:flex; flex-direction:column; flex:1; min-height:0; }
+.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-shrink:0; }
+.page-title { font-size:28px; font-weight:700; color:var(--gray-900); letter-spacing:-0.02em; line-height:1.2; }
+.page-subtitle { font-size:13px; color:var(--gray-400); margin-top:4px; }
+
+/* ── Dashboard Grid ── */
+.dash-grid {
+  display:grid;
+  grid-template-columns:2fr 1fr;
+  grid-template-rows:2fr 1fr;
+  gap:12px;
+  flex:1; min-height:0;
+}
+/* 左栏上：趋势图 */
+.dash-trend { grid-column:1; grid-row:1; display:flex; flex-direction:column; overflow:hidden; }
+/* 左栏下：七日统计 */
+.dash-week { grid-column:1; grid-row:2; display:flex; flex-direction:column; overflow:hidden; }
+/* 右栏上：今日概览 + 排名（flex 堆叠） */
+.dash-right-top { grid-column:2; grid-row:1; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+.dash-right-top .card { overflow:hidden; }
+.dash-right-top .card:last-child { flex:1; min-height:0; }
+/* 右栏下：当前审计 */
+.dash-audit { grid-column:2; grid-row:2; display:flex; flex-direction:column; overflow:hidden; }
+.dash-audit .card { flex:1; }
+
+/* Card */
+.card {
+  background:var(--gray-0);
+  border:1px solid var(--gray-200);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  transition:box-shadow 200ms ease;
+}
+.card-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 16px; border-bottom:1px solid var(--gray-100);
+  min-height:42px;
+}
+.card-title {
+  font-size:12px; font-weight:600; color:var(--gray-700);
+  display:flex; align-items:center; gap:6px;
+}
+.card-title svg { color:var(--gray-400); flex-shrink:0; }
+.card-body { padding:16px; flex:1; }
+.card-badge {
+  font-size:10px; font-weight:600; color:var(--brand);
+  background:rgba(79,70,229,0.08);
+  padding:1px 8px; border-radius:8px;
+}
+
+/* Trend Chart */
+.trend-card { display:flex; flex-direction:column; flex:1; min-height:0; }
+.sub-chart { flex:1; display:flex; flex-direction:column; min-height:0; }
+.sub-chart-header {
+  display:flex; align-items:center; height:14px; flex-shrink:0; padding:0 2px;
+}
+.sub-chart-label {
+  font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;
+  display:flex; align-items:center; gap:3px;
+}
+.sub-chart-dot { display:inline-block; width:5px; height:5px; border-radius:1.5px; flex-shrink:0; }
+.sub-chart-svg { width:100%; flex:1; min-height:0; }
+.diff-rate {
+  flex-shrink:0; height:20px; display:flex; align-items:center;
+  justify-content:flex-end; padding:0 4px;
+  font-size:12px; font-weight:700; font-family:var(--font-mono);
+}
+.diff-good { color:var(--success); } .diff-warn { color:var(--warning); } .diff-bad { color:var(--danger); }
+
+/* 7-Day Bar */
+/* week-card: now inside flex */
+
+/* Today Overview */
+/* today-card: unused */
+.stat-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:4px 0; border-bottom:1px solid var(--gray-100);
+}
+.stat-label { font-size:12px; color:var(--gray-500); }
+.stat-value { font-size:14px; font-weight:700; color:var(--gray-900); font-variant-numeric:tabular-nums; }
+.stat-value.warn { color:var(--warning); }
+.stat-value.bad { color:var(--danger); }
+
+/* Pie Chart */
+.pie-wrap { display:flex; align-items:center; gap:8px; padding:4px 0; }
+.pie-canvas { position:relative; width:76px; height:76px; flex-shrink:0; }
+.pie-legend { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.legend-item { display:flex; align-items:center; gap:4px; font-size:10px; min-width:0; }
+.legend-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.legend-name { color:var(--gray-600); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-shrink:1; }
+.legend-audit { color:var(--gray-900); font-weight:700; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.legend-claimed { color:var(--gray-400); font-size:9px; margin-left:auto; flex-shrink:0; }
+
+/* Diff rows (in cards) */
+.diff-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:4px 0; border-bottom:1px solid var(--gray-100);
+  font-size:11px;
+}
+.diff-row:last-child { border-bottom:none; }
+.diff-row-label { color:var(--gray-500); display:flex; align-items:center; gap:5px; }
+.diff-row-val { font-weight:600; font-variant-numeric:tabular-nums; }
+
+/* Provider Ranking */
+.rank-card { display:flex; flex-direction:column; }
+.rank-card .card-body { overflow-y:auto; }
+.rank-item {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 4px; border-radius:var(--radius-sm);
+  cursor:pointer; transition:background 150ms ease;
+}
+.rank-item:hover { background:var(--gray-50); }
+.rank-item.active {
+  background:rgba(79,70,229,0.04);
+  border-left:3px solid var(--brand);
+  padding-left:1px;
+}
+.rank-num {
+  width:18px; height:18px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:700; color:var(--gray-400);
+  background:var(--gray-100); flex-shrink:0;
+}
+.rank-name { font-size:11px; font-weight:500; color:var(--gray-700); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rank-score { font-size:11px; font-weight:700; color:var(--success); flex-shrink:0; }
+
+/* Current Audit */
+.audit-card { display:flex; flex-direction:column; }
+.audit-passed { display:flex; align-items:center; gap:6px; padding:0 0 8px; }
+.audit-icon { width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.audit-icon.ok { background:#ECFDF5; color:var(--success); }
+.audit-icon.fail { background:#FEF2F2; color:var(--danger); }
+.audit-bar-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.audit-bar-label { font-size:10px; width:28px; text-align:right; font-weight:600; flex-shrink:0; }
+.audit-bar-track { flex:1; height:4px; background:var(--gray-100); position:relative; }
+.audit-bar-fill { height:100%; position:absolute; top:0; left:0; border-radius:2px; }
+.audit-bar-val { font-size:10px; font-weight:600; color:var(--gray-600); width:44px; text-align:right; flex-shrink:0; }
+
+/* ── Buttons ── */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:8px 16px; border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; min-height:36px;
+  transition:all 150ms var(--ease-out); white-space:nowrap;
+  position:relative; overflow:hidden;
+}
+.btn:active { transform:scale(0.98); }
+.btn-primary { background:var(--brand); color:white; box-shadow:0 1px 2px rgba(79,70,229,0.2); }
+.btn-primary:hover { background:#4338CA; box-shadow:0 4px 8px rgba(79,70,229,0.25); transform:translateY(-1px); }
+.btn-secondary { background:var(--gray-100); color:var(--gray-700); }
+.btn-secondary:hover { background:var(--gray-200); color:var(--gray-900); }
+.btn-danger { background:#FEF2F2; color:var(--danger); }
+.btn-danger:hover { background:var(--danger); color:white; }
+.btn-ghost { color:var(--gray-500); }
+.btn-ghost:hover { background:var(--gray-100); color:var(--gray-800); }
+.btn-sm { padding:4px 12px; font-size:12px; min-height:28px; border-radius:20px; }
+.btn-lg { padding:12px 24px; font-size:14px; min-height:44px; border-radius:10px; }
+
+/* ── Badge ── */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 8px; border-radius:10px;
+  font-size:11px; font-weight:600; white-space:nowrap;
+}
+.badge-info { background:rgba(79,70,229,0.08); color:var(--brand); }
+.badge-success { background:#ECFDF5; color:var(--success); }
+.badge-neutral { background:var(--gray-100); color:var(--gray-500); }
+.badge-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+
+/* ── Toggle ── */
+.toggle {
+  width:44px; height:24px; background:var(--gray-300);
+  border-radius:12px; position:relative; cursor:pointer;
+  transition:all 150ms var(--ease-out); flex-shrink:0;
+}
+.toggle.active { background:var(--brand); }
+.toggle-knob {
+  width:20px; height:20px; background:var(--gray-0);
+  border-radius:50%; position:absolute; top:2px; left:2px;
+  transition:all 150ms var(--ease-spring);
+  box-shadow:0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle.active .toggle-knob { left:22px; }
+
+/* ── Form Input ── */
+.form-input {
+  padding:8px 10px; border:1px solid var(--gray-300);
+  border-radius:var(--radius-sm); font-size:13px;
+  background:var(--gray-0); color:var(--gray-900);
+  outline:none; min-height:36px; transition:all 150ms var(--ease-out);
+}
+.form-input:hover { border-color:var(--gray-400); }
+.form-input:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(79,70,229,0.15); }
+.form-input-sm { padding:4px 8px; min-height:32px; font-size:12px; }
+
+/* ── Provider Card ── */
+.provider-card {
+  background:var(--gray-0);
+  border:1px solid var(--gray-200);
+  border-radius:var(--radius-lg);
+  padding:24px; margin-bottom:16px;
+  transition:all 150ms var(--ease-out);
+  position:relative; overflow:hidden;
+  cursor:pointer;
+}
+.provider-card:hover { border-color:var(--gray-300); box-shadow:var(--shadow-md); transform:translateY(-1px); }
+.provider-card.active {
+  border-color:var(--brand-light);
+  box-shadow:0 0 0 3px rgba(79,70,229,0.08);
+}
+.provider-card.active::before {
+  content:''; position:absolute; top:0; left:0; right:0;
+  height:3px; background:linear-gradient(90deg, var(--brand), var(--brand-light));
+}
+.provider-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; }
+.provider-card-info { flex:1; min-width:0; }
+.provider-card-name { font-size:20px; font-weight:700; color:var(--gray-900); letter-spacing:-0.02em; margin-bottom:2px; }
+.provider-card-url { font-size:12px; color:var(--gray-400); font-family:var(--font-mono); word-break:break-all; margin-bottom:8px; }
+.provider-card-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.provider-card-actions { display:flex; flex-direction:column; align-items:center; gap:8px; flex-shrink:0; }
+
+/* Model Tag */
+.model-tag {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 8px; background:var(--gray-100); border-radius:10px;
+  font-size:11px; color:var(--gray-600); font-weight:600;
+  cursor:pointer; transition:all 150ms ease;
+  border:1px solid transparent; user-select:none; white-space:nowrap;
+}
+.model-tag:hover { background:rgba(79,70,229,0.06); color:var(--brand); border-color:rgba(79,70,229,0.12); }
+.model-tag.active { background:rgba(79,70,229,0.06); color:var(--brand); border-color:var(--brand); box-shadow:0 0 0 3px rgba(79,70,229,0.15); }
+
+/* Trust Ring */
+.trust-ring { width:56px; height:56px; position:relative; flex-shrink:0; }
+.trust-ring svg { transform:rotate(-90deg); }
+.trust-ring-value {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%, -50%);
+  font-size:16px; font-weight:800; letter-spacing:-0.02em;
+}
+.trust-ring-value.high { color:var(--success); }
+.trust-ring-value.medium { color:var(--warning); }
+.trust-ring-value.low { color:var(--danger); }
+
+/* Audit Bars (Provider Card) */
+.dim-section { margin-bottom:16px; }
+.dim-header { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.02em; margin-bottom:8px; }
+.dim-header.prefill { color:var(--ico-input); }
+.dim-header.output { color:var(--ico-output); }
+.dim-bar-row { display:flex; align-items:center; gap:8px; margin-bottom:3px; }
+.dim-bar-label { font-size:10px; font-weight:600; color:#000; width:28px; flex-shrink:0; text-align:right; }
+.dim-bar-track { flex:1; height:4px; background:var(--gray-100); position:relative; border-radius:2px; overflow:hidden; }
+.dim-bar-segment { height:100%; position:absolute; top:0; transition:all 300ms var(--ease-out); }
+.dim-bar-segment.input { background:var(--ico-input); left:0; }
+.dim-bar-segment.cache { background:var(--ico-cache); right:0; }
+.dim-bar-segment.output-claimed { background:var(--ico-output); left:0; }
+.dim-bar-segment.output-detected { background:#6EE7B7; left:0; }
+.dim-bar-value { font-size:10px; font-weight:600; color:var(--gray-600); width:44px; flex-shrink:0; text-align:right; font-variant-numeric:tabular-nums; }
+.dim-diff-row { display:flex; align-items:center; gap:16px; margin-top:6px; margin-left:28px; font-size:10px; font-weight:600; font-variant-numeric:tabular-nums; }
+.dim-diff-item { display:flex; align-items:center; gap:5px; }
+.dim-diff-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.dim-diff-dot.input { background:var(--ico-input); }
+.dim-diff-dot.cache { background:var(--ico-cache); }
+.dim-diff-dot.output { background:var(--ico-output); }
+.dim-diff-label { font-size:10px; color:var(--gray-500); margin-right:2px; }
+.dim-diff-val.ok { color:var(--success); } .dim-diff-val.warn { color:var(--warning); } .dim-diff-val.bad { color:var(--danger); }
+
+/* Provider Grid */
+.provider-grid { display:grid; grid-template-columns:1fr; gap:16px; }
+
+/* Card Menu (three-dot) */
+.card-menu-wrap { position:relative; display:inline-flex; }
+.card-menu-btn {
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:var(--radius-sm);
+  cursor:pointer; color:var(--gray-400); transition:all 150ms ease;
+  position:absolute; top:12px; right:12px;
+}
+.card-menu-btn:hover { background:var(--gray-100); color:var(--gray-600); border-color:var(--gray-200); }
+.card-menu-dropdown {
+  display:none; position:absolute; top:calc(100% + 4px); right:0;
+  min-width:160px; background:white; border:1px solid var(--gray-200);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-lg); z-index:100;
+  padding:4px;
+}
+.card-menu-dropdown.open { display:block; }
+.card-menu-item {
+  display:flex; align-items:center; gap:8px; width:100%;
+  padding:6px 10px; background:transparent; border:none;
+  border-radius:var(--radius-sm); cursor:pointer;
+  font-size:13px; font-weight:500; color:var(--gray-700);
+  transition:all 100ms ease; text-align:left;
+}
+.card-menu-item:hover { background:var(--gray-100); }
+.card-menu-item.danger { color:var(--danger); }
+.card-menu-item.danger:hover { background:#FEF2F2; }
+
+/* ── Settings ── */
+.settings-section {
+  background:var(--gray-0); border:1px solid var(--gray-200);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow-card);
+  margin-bottom:16px;
+}
+.settings-section-header { padding:20px 24px; border-bottom:1px solid var(--gray-100); }
+.settings-section-title { font-size:14px; font-weight:600; color:var(--gray-900); }
+.settings-section-desc { font-size:12px; color:var(--gray-400); margin-top:2px; }
+.settings-section-body { padding:20px 24px; }
+.settings-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 0; gap:24px;
+}
+.settings-row + .settings-row { border-top:1px solid var(--gray-100); }
+.settings-row-left { flex:1; }
+.settings-row-label { font-size:13px; font-weight:600; color:var(--gray-800); margin-bottom:2px; }
+.settings-row-desc { font-size:12px; color:var(--gray-400); }
+.settings-row-right { flex-shrink:0; display:flex; align-items:center; gap:12px; }
+
+/* Dev Section */
+.dev-section { display:none; border-top:1px solid #FDE68A; background:#FFFBEB; border-radius:0 0 var(--radius-lg) var(--radius-lg); padding:20px 24px; }
+.dev-section.visible { display:block; }
+.dev-warning {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:12px; background:rgba(217,119,6,0.1);
+  border-radius:var(--radius-sm); margin-bottom:16px;
+  font-size:12px; color:var(--warning); font-weight:500;
+}
+
+/* ── Modal Overlay ── */
+.modal-overlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.4); backdrop-filter:blur(4px);
+  z-index:200; align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+  background:white; border-radius:var(--radius-lg);
+  box-shadow:0 20px 60px rgba(0,0,0,0.15);
+  max-width:400px; width:90%; padding:24px;
+}
+.modal-title { font-size:16px; font-weight:700; color:var(--gray-900); margin-bottom:8px; }
+.modal-desc { font-size:13px; color:var(--gray-500); margin-bottom:24px; line-height:1.5; }
+.modal-actions { display:flex; gap:12px; justify-content:flex-end; }
+
+/* Dev Panel */
+.dev-panel { display:flex; flex-direction:row; height:calc(100vh - 80px); }
+.dev-half { flex:1; display:flex; flex-direction:column; min-width:0; }
+.dev-half + .dev-half { border-left:1px solid var(--gray-200); }
+.dev-half-header { font-size:11px; font-weight:500; color:var(--gray-400); text-transform:uppercase; letter-spacing:0.05em; padding:12px 16px 8px; border-bottom:1px solid var(--gray-100); }
+.dev-half-body { flex:1; overflow:auto; padding:12px 16px; font-family:var(--font-mono); font-size:13px; white-space:pre-wrap; word-break:break-all; color:var(--gray-300); background:var(--gray-900); }
+
+/* Dev nav item */
+.nav-item.dev { display:none; }
+.dev-mode-on .nav-item.dev { display:flex; }
+
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- ========== SIDEBAR ========== -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-icon">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
+          <path d="M9 12C9 7 12 4 16 4C20 4 23 7 23 12C23 16 20 18 16 18C12 18 9 16 9 12Z" stroke="white" stroke-width="2" fill="none"/>
+          <path d="M10 6L8 2L12 5" stroke="white" stroke-width="2" fill="none"/>
+          <path d="M22 6L24 2L20 5" stroke="white" stroke-width="2" fill="none"/>
+          <circle cx="12.5" cy="12" r="3.5" stroke="white" stroke-width="1.8" fill="none"/>
+          <circle cx="19.5" cy="12" r="3.5" stroke="white" stroke-width="1.8" fill="none"/>
+          <circle cx="12.5" cy="12" r="1.8" fill="white"/>
+          <circle cx="19.5" cy="12" r="1.8" fill="white"/>
+          <path d="M16 14L14.5 17H17.5L16 14Z" fill="white"/>
+          <path d="M11 18C8 20 7 24 8 28H24C25 24 24 20 21 18" stroke="white" stroke-width="2" fill="none"/>
+        </svg>
+      </div>
+      <div>
+        <div class="sidebar-brand-text">TokenAccountant</div>
+        <div class="sidebar-brand-version">v0.3</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="switchPage('dashboard')">
+        <span class="nav-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </span>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="switchPage('providers')">
+        <span class="nav-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16"/><path d="M6 16l6-12 6 12"/></svg>
+        </span>
+        Providers
+      </div>
+      <div class="nav-item" onclick="switchPage('settings')">
+        <span class="nav-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
+        Settings
+      </div>
+      <div class="nav-item dev" onclick="switchPage('dev')">
+        <span class="nav-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </span>
+        Developer
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="proxy-btn running" id="proxyToggle">
+        <span class="proxy-dot running"></span>
+        <span id="proxyLabel">代理运行中</span>
+        <span class="proxy-timer" id="proxyTimer" style="display:none;">00:00:00</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ========== MAIN ========== -->
+  <main class="main-content">
+
+    <!-- ==================== DASHBOARD ==================== -->
+    <div class="page page-flex active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">仪表盘</h1>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-ghost btn-sm" title="刷新">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="dash-grid">
+        <!-- ── Left Top: Token Trend ── -->
+        <div class="card trend-card dash-trend">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Token 趋势
+            </span>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:1px;padding:8px 12px;">
+            <!-- Input -->
+            <div class="sub-chart">
+              <div class="sub-chart-header">
+                <span class="sub-chart-label" style="color:#60A5FA;"><span class="sub-chart-dot" style="background:#60A5FA;"></span>Input</span>
+              </div>
+              <svg class="sub-chart-svg" viewBox="0 0 740 85">
+                <line x1="44" y1="8" x2="724" y2="8" stroke="#F3F4F6" stroke-width="1"/>
+                <line x1="44" y1="33" x2="724" y2="33" stroke="#F3F4F6" stroke-width="1"/>
+                <line x1="44" y1="58" x2="724" y2="58" stroke="#F3F4F6" stroke-width="1"/>
+                <text x="39" y="12" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">12K</text>
+                <text x="39" y="37" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">6K</text>
+                <text x="39" y="62" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">0</text>
+                <path d="M44,56 L80,47 L116,51 L152,39 L188,43 L224,32 L260,37 L296,26 L332,31 L368,22 L404,25 L440,16 L476,19 L512,12 L548,15 L584,8 L620,10 L656,5 L692,7 L724,32 L724,38 L692,12 L656,10 L620,15 L584,14 L548,20 L512,18 L476,25 L440,22 L404,30 L368,28 L332,36 L296,32 L260,42 L224,38 L188,48 L152,44 L116,56 L80,52 L44,60 Z" fill="#60A5FA" fill-opacity="0.10"/>
+                <path d="M44,60 L80,52 L116,56 L152,44 L188,48 L224,38 L260,42 L296,32 L332,36 L368,28 L404,30 L440,22 L476,25 L512,18 L548,20 L584,14 L620,15 L656,10 L692,12 L724,38" fill="none" stroke="#60A5FA" stroke-width="2" stroke-linecap="round"/>
+                <path d="M44,56 L80,47 L116,51 L152,39 L188,43 L224,32 L260,37 L296,26 L332,31 L368,22 L404,25 L440,16 L476,19 L512,12 L548,15 L584,8 L620,10 L656,5 L692,7 L724,32" fill="none" stroke="#60A5FA" stroke-width="1.5" stroke-opacity="0.35" stroke-linecap="round"/>
+              </svg>
+              <div class="diff-rate diff-good">2.3%</div>
+            </div>
+            <!-- Cache -->
+            <div class="sub-chart">
+              <div class="sub-chart-header">
+                <span class="sub-chart-label" style="color:#FB923C;"><span class="sub-chart-dot" style="background:#FB923C;"></span>Cache</span>
+              </div>
+              <svg class="sub-chart-svg" viewBox="0 0 740 85">
+                <line x1="44" y1="8" x2="724" y2="8" stroke="#F3F4F6" stroke-width="1"/>
+                <line x1="44" y1="46" x2="724" y2="46" stroke="#F3F4F6" stroke-width="1"/>
+                <text x="39" y="12" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">6K</text>
+                <text x="39" y="50" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">3K</text>
+                <path d="M44,58 L80,52 L116,56 L152,46 L188,50 L224,40 L260,44 L296,34 L332,38 L368,28 L404,32 L440,24 L476,28 L512,20 L548,22 L584,15 L620,16 L656,10 L692,12 L724,35 L724,42 L692,20 L656,18 L620,24 L584,22 L548,30 L512,28 L476,36 L440,32 L404,40 L368,36 L332,46 L296,42 L260,52 L224,48 L188,58 L152,54 L116,64 L80,60 L44,66 Z" fill="#FB923C" fill-opacity="0.10"/>
+                <path d="M44,66 L80,60 L116,64 L152,54 L188,58 L224,48 L260,52 L296,42 L332,46 L368,36 L404,40 L440,32 L476,36 L512,28 L548,30 L584,22 L620,24 L656,18 L692,20 L724,42" fill="none" stroke="#FB923C" stroke-width="2" stroke-linecap="round"/>
+                <path d="M44,58 L80,52 L116,56 L152,46 L188,50 L224,40 L260,44 L296,34 L332,38 L368,28 L404,32 L440,24 L476,28 L512,20 L548,22 L584,15 L620,16 L656,10 L692,12 L724,35" fill="none" stroke="#FB923C" stroke-width="1.5" stroke-opacity="0.35" stroke-linecap="round"/>
+              </svg>
+              <div class="diff-rate diff-warn">14.0%</div>
+            </div>
+            <!-- Output -->
+            <div class="sub-chart">
+              <div class="sub-chart-header">
+                <span class="sub-chart-label" style="color:#34D399;"><span class="sub-chart-dot" style="background:#34D399;"></span>Output</span>
+              </div>
+              <svg class="sub-chart-svg" viewBox="0 0 740 85">
+                <line x1="44" y1="8" x2="724" y2="8" stroke="#F3F4F6" stroke-width="1"/>
+                <line x1="44" y1="46" x2="724" y2="46" stroke="#F3F4F6" stroke-width="1"/>
+                <text x="39" y="12" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">8K</text>
+                <text x="39" y="50" text-anchor="end" fill="#D1D5DB" font-size="8" font-family="monospace">4K</text>
+                <path d="M44,56 L80,48 L116,52 L152,42 L188,46 L224,35 L260,40 L296,30 L332,34 L368,24 L404,28 L440,20 L476,22 L512,15 L548,18 L584,10 L620,12 L656,6 L692,8 L724,33 L724,40 L692,16 L656,14 L620,20 L584,18 L548,26 L512,22 L476,30 L440,28 L404,36 L368,32 L332,42 L296,38 L260,48 L224,42 L188,54 L152,50 L116,60 L80,56 L44,64 Z" fill="#34D399" fill-opacity="0.10"/>
+                <path d="M44,64 L80,56 L116,60 L152,50 L188,54 L224,42 L260,48 L296,38 L332,42 L368,32 L404,36 L440,28 L476,30 L512,22 L548,26 L584,18 L620,20 L656,14 L692,16 L724,40" fill="none" stroke="#34D399" stroke-width="2" stroke-linecap="round"/>
+                <path d="M44,56 L80,48 L116,52 L152,42 L188,46 L224,35 L260,40 L296,30 L332,34 L368,24 L404,28 L440,20 L476,22 L512,15 L548,18 L584,10 L620,12 L656,6 L692,8 L724,33" fill="none" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.35" stroke-linecap="round"/>
+              </svg>
+              <div class="diff-rate diff-good">3.1%</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:20px;padding:0 16px 12px;font-size:11px;color:var(--gray-500);">
+            <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:2px;border-radius:2px;background:currentColor;"></span>审计值</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:2px;background:currentColor;opacity:0.3;border-radius:2px;"></span>声称值</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:8px;background:currentColor;opacity:0.10;border-radius:2px;"></span>差值区域</span>
+          </div>
+        </div>
+
+
+        <!-- ── Left Bottom: 7-Day Bar ── -->
+        <div class="card week-card dash-week">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              近 7 日 Token 统计
+            </span>
+            <span class="card-badge">当前 Provider</span>
+          </div>
+          <div class="card-body" style="flex:1;padding:12px;display:flex;flex-direction:column;">
+            <svg viewBox="0 0 700 176" style="width:100%;height:100%;">
+              <line x1="60" y1="16" x2="60" y2="156" stroke="#E5E7EB" stroke-width="1"/>
+              <line x1="60" y1="156" x2="680" y2="156" stroke="#E5E7EB" stroke-width="1"/>
+              <text x="56" y="20" text-anchor="end" fill="#9CA3AF" font-size="10" font-family="monospace">100K</text>
+              <text x="56" y="90" text-anchor="end" fill="#9CA3AF" font-size="10" font-family="monospace">50K</text>
+              <text x="56" y="160" text-anchor="end" fill="#9CA3AF" font-size="10" font-family="monospace">0</text>
+              <line x1="60" y1="88" x2="680" y2="88" stroke="#F3F4F6" stroke-width="1" stroke-dasharray="4"/>
+              <!-- Day 1: 6/14 i=32 c=22 o=28 -->
+              <rect x="52" y="108" width="14" height="48" fill="#60A5FA" rx="2"/><rect x="52" y="108" width="14" height="48" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="70" y="121" width="14" height="35" fill="#FB923C" rx="2"/><rect x="70" y="121" width="14" height="35" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="88" y="111" width="14" height="45" fill="#34D399" rx="2"/><rect x="88" y="111" width="14" height="45" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="77" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">6/14</text>
+              <!-- Day 2: 6/15 i=38 c=26 o=32 -->
+              <rect x="139" y="95" width="14" height="61" fill="#60A5FA" rx="2"/><rect x="139" y="95" width="14" height="61" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="157" y="114" width="14" height="42" fill="#FB923C" rx="2"/><rect x="157" y="114" width="14" height="42" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="175" y="105" width="14" height="51" fill="#34D399" rx="2"/><rect x="175" y="105" width="14" height="51" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="164" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">6/15</text>
+              <!-- Day 3: 6/16 i=28 c=18 o=24 -->
+              <rect x="226" y="111" width="14" height="45" fill="#60A5FA" rx="2"/><rect x="226" y="111" width="14" height="45" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="244" y="127" width="14" height="29" fill="#FB923C" rx="2"/><rect x="244" y="127" width="14" height="29" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="262" y="118" width="14" height="38" fill="#34D399" rx="2"/><rect x="262" y="118" width="14" height="38" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="251" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">6/16</text>
+              <!-- Day 4: 6/17 i=35 c=24 o=30 -->
+              <rect x="313" y="100" width="14" height="56" fill="#60A5FA" rx="2"/><rect x="313" y="100" width="14" height="56" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="331" y="118" width="14" height="38" fill="#FB923C" rx="2"/><rect x="331" y="118" width="14" height="38" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="349" y="108" width="14" height="48" fill="#34D399" rx="2"/><rect x="349" y="108" width="14" height="48" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="338" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">6/17</text>
+              <!-- Day 5: 6/18 i=42 c=30 o=36 -->
+              <rect x="400" y="89" width="14" height="67" fill="#60A5FA" rx="2"/><rect x="400" y="89" width="14" height="67" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="418" y="108" width="14" height="48" fill="#FB923C" rx="2"/><rect x="418" y="108" width="14" height="48" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="436" y="98" width="14" height="58" fill="#34D399" rx="2"/><rect x="436" y="98" width="14" height="58" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="425" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">6/18</text>
+              <!-- Day 6: 6/19 i=36 c=25 o=32 -->
+              <rect x="487" y="98" width="14" height="58" fill="#60A5FA" rx="2"/><rect x="487" y="98" width="14" height="58" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="505" y="116" width="14" height="40" fill="#FB923C" rx="2"/><rect x="505" y="116" width="14" height="40" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="523" y="105" width="14" height="51" fill="#34D399" rx="2"/><rect x="523" y="105" width="14" height="51" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="512" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">6/19</text>
+              <!-- Day 7: 今天 i=48 c=34 o=40 -->
+              <rect x="574" y="79" width="14" height="77" fill="#60A5FA" rx="2"/><rect x="574" y="79" width="14" height="77" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="592" y="102" width="14" height="54" fill="#FB923C" rx="2"/><rect x="592" y="102" width="14" height="54" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <rect x="610" y="92" width="14" height="64" fill="#34D399" rx="2"/><rect x="610" y="92" width="14" height="64" fill="none" stroke="#000" stroke-opacity="0.2" stroke-width="1" rx="2"/>
+              <text x="599" y="172" text-anchor="middle" fill="#9CA3AF" font-size="10">今天</text>
+            </svg>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:0 16px 12px;font-size:10px;color:var(--gray-500);flex-wrap:wrap;">
+            <span style="display:flex;align-items:center;gap:3px;"><span style="display:inline-block;width:10px;height:6px;background:#60A5FA;border-radius:1px;"></span>Input</span>
+            <span style="display:flex;align-items:center;gap:3px;"><span style="display:inline-block;width:10px;height:6px;background:#FB923C;border-radius:1px;"></span>Cache</span>
+            <span style="display:flex;align-items:center;gap:3px;"><span style="display:inline-block;width:10px;height:6px;background:#34D399;border-radius:1px;"></span>Output</span>
+            <span style="display:flex;align-items:center;gap:3px;margin-left:8px;"><span style="display:inline-block;width:16px;height:2px;border-radius:1px;background:#000;opacity:0.3;"></span>声称描框</span>
+          </div>
+        </div>
+
+        <div class="dash-right-top">
+
+        <!-- ── Today Overview ── -->
+        <div class="card" style="flex-shrink:0;">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>
+              今日概览
+            </span>
+          </div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:0;">
+              <div class="stat-row">
+                <span class="stat-label">请求次数</span>
+                <span class="stat-value">1,284</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">可疑请求</span>
+                <span class="stat-value warn">47</span>
+              </div>
+              <div style="height:1px;background:var(--gray-100);margin:8px 0;"></div>
+              <!-- Pie: model token distribution -->
+              <div class="pie-wrap">
+                <div class="pie-canvas">
+                  <svg width="76" height="76" viewBox="0 0 100 100" id="modelPie">
+                  </svg>
+                </div>
+                <div class="pie-legend" id="pieLegend">
+                  <!-- 由 JS 动态生成 -->
+                </div>
+              </div>
+              <div style="font-size:9px;color:var(--gray-400);margin-top:2px;text-align:center;" id="pieCaption"></div>
+              <div style="height:1px;background:var(--gray-100);margin:8px 0;"></div>
+              <div class="diff-row">
+                <span class="diff-row-label">Input 差异</span>
+                <span class="diff-row-val" style="color:var(--danger);">+12.4K (6.2%)</span>
+              </div>
+              <div class="diff-row">
+                <span class="diff-row-label">Cache 差异</span>
+                <span class="diff-row-val" style="color:var(--warning);">-1.8K (14.0%)</span>
+              </div>
+              <div class="diff-row">
+                <span class="diff-row-label">Output 差异</span>
+                <span class="diff-row-val" style="color:var(--success);">+0.8K (3.1%)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provider Ranking -->
+          <div class="card rank-card">
+            <div class="card-header">
+              <span class="card-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                Provider 可信度
+              </span>
+            </div>
+            <div class="card-body" style="padding:10px 12px;">
+              <div class="rank-item active">
+                <span class="rank-num" style="background:#FEF3C7;color:#D97706;">1</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                    <span class="rank-name">OpenAI Official</span>
+                    <span class="rank-score">97%</span>
+                  </div>
+                  <div style="font-size:9px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">https://api.openai.com</div>
+                  <div style="font-size:9px;color:var(--gray-400);margin-top:2px;">
+                    <span style="color:#60A5FA;">I</span> 2.3%
+                    <span style="color:#FB923C;margin-left:6px;">C</span> 1.8%
+                    <span style="color:#34D399;margin-left:6px;">O</span> 3.1%
+                  </div>
+                </div>
+              </div>
+              <div class="rank-item">
+                <span class="rank-num" style="background:#E5E7EB;color:#374151;">2</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                    <span class="rank-name">DeepSeek Official</span>
+                    <span class="rank-score">92%</span>
+                  </div>
+                  <div style="font-size:9px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">https://api.deepseek.com</div>
+                  <div style="font-size:9px;color:var(--gray-400);margin-top:2px;">
+                    <span style="color:#60A5FA;">I</span> 1.2%
+                    <span style="color:#FB923C;margin-left:6px;">C</span> 0.8%
+                    <span style="color:#34D399;margin-left:6px;">O</span> 2.4%
+                  </div>
+                </div>
+              </div>
+              <div class="rank-item">
+                <span class="rank-num" style="background:#FEEBC8;color:#B45309;">3</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                    <span class="rank-name">便宜中转站</span>
+                    <span class="rank-score" style="color:var(--warning);">58%</span>
+                  </div>
+                  <div style="font-size:9px;color:var(--gray-400);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">https://relay.example.com</div>
+                  <div style="font-size:9px;color:var(--gray-400);margin-top:2px;">
+                    <span style="color:#60A5FA;">I</span> 18.5%
+                    <span style="color:#FB923C;margin-left:6px;">C</span> 12.3%
+                    <span style="color:#34D399;margin-left:6px;">O</span> 24.6%
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /dash-right-top -->
+
+        <div class="dash-audit">        <!-- ── Current Audit ── -->
+        <div class="card audit-card">
+          <div class="card-header">
+            <span class="card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+              当前请求审计
+            </span>
+          </div>
+          <div class="card-body">
+            <div class="audit-passed">
+              <div class="audit-icon ok">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <span style="font-size:11px;color:var(--gray-500);font-weight:500;">审计通过</span>
+            </div>
+            <div class="audit-bar-row">
+              <span class="audit-bar-label">审计</span>
+              <div class="audit-bar-track">
+                <div class="audit-bar-fill" style="width:52%;background:#60A5FA;"></div>
+                <div class="audit-bar-fill" style="width:18%;left:52%;background:#FB923C;"></div>
+                <div class="audit-bar-fill" style="width:20%;left:70%;background:#34D399;"></div>
+              </div>
+              <span class="audit-bar-val">18.2K</span>
+            </div>
+            <div class="audit-bar-row">
+              <span class="audit-bar-label">声称</span>
+              <div class="audit-bar-track">
+                <div class="audit-bar-fill" style="width:55%;background:#60A5FA;opacity:0.45;"></div>
+                <div class="audit-bar-fill" style="width:20%;left:55%;background:#FB923C;opacity:0.45;"></div>
+                <div class="audit-bar-fill" style="width:22%;left:75%;background:#34D399;opacity:0.45;"></div>
+              </div>
+              <span class="audit-bar-val">20.8K</span>
+            </div>
+            <div style="border-top:1px solid var(--gray-100);margin:8px 0 4px;"></div>
+            <div class="diff-row">
+              <span class="diff-row-label">Input 差异</span>
+              <span class="diff-row-val" style="color:var(--danger);">+1.2K</span>
+            </div>
+            <div class="diff-row">
+              <span class="diff-row-label">Cache 差异</span>
+              <span class="diff-row-val" style="color:var(--warning);">+0.4K</span>
+            </div>
+            <div class="diff-row">
+              <span class="diff-row-label">Output 差异</span>
+              <span class="diff-row-val" style="color:var(--success);">+0.1K</span>
+            </div>
+          </div>
+        </div>
+
+
+      </div><!-- /dash-audit -->
+
+      </div><!-- /dash-grid -->
+    </div><!-- /page-dashboard -->
+
+    <!-- ==================== PROVIDERS ==================== -->
+    <div class="page" id="page-providers">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Providers</h1>
+          <p class="page-subtitle">管理 AI Provider · 点击卡片切换活跃 Provider</p>
+        </div>
+        <button class="btn btn-primary" onclick="showAddForm()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          添加 Provider
+        </button>
+      </div>
+
+      <div class="provider-grid">
+        <!-- Provider 1: OpenAI Official -->
+        <div class="provider-card active" onclick="switchProvider(this)">
+          <div class="card-menu-wrap">
+            <button class="card-menu-btn" onclick="event.stopPropagation();toggleMenu(this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            <div class="card-menu-dropdown">
+              <button class="card-menu-item" onclick="event.stopPropagation();">编辑</button>
+              <button class="card-menu-item danger" onclick="event.stopPropagation();showDeleteConfirm()">删除 Provider</button>
+            </div>
+          </div>
+          <div class="provider-card-header">
+            <div class="provider-card-info">
+              <div class="provider-card-name">OpenAI Official</div>
+              <div class="provider-card-url">https://api.openai.com/v1/chat/completions</div>
+              <div class="provider-card-meta">
+                <span class="badge badge-info"><span class="badge-dot"></span>官方</span>
+                <span class="badge badge-success"><span class="badge-dot"></span>活跃</span>
+              </div>
+              <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">gpt-4o</span>
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">gpt-4-turbo</span>
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">gpt-3.5-turbo</span>
+              </div>
+            </div>
+            <div class="provider-card-actions">
+              <div style="text-align:center;">
+                <div class="trust-ring">
+                  <svg viewBox="0 0 56 56">
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#E5E7EB" stroke-width="4"/>
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#059669" stroke-width="4" stroke-dasharray="150.8" stroke-dashoffset="4.5" stroke-linecap="round"/>
+                  </svg>
+                  <span class="trust-ring-value high">97</span>
+                </div>
+                <div style="font-size:10px;color:var(--gray-400);margin-top:8px;">可信度</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();" style="margin-top:20px;">当前</button>
+            </div>
+          </div>
+          <!-- Audit bars -->
+          <div class="dim-section">
+            <div class="dim-header prefill">Prefill</div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">声称</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment input" style="left:0;width:65%;"></div>
+                <div class="dim-bar-segment cache" style="right:0;width:35%;"></div>
+              </div>
+              <span class="dim-bar-value">156.2K</span>
+            </div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">审计</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment input" style="left:0;width:63%;"></div>
+                <div class="dim-bar-segment cache" style="right:0;width:33%;"></div>
+              </div>
+              <span class="dim-bar-value">152.8K</span>
+            </div>
+            <div class="dim-diff-row">
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot input"></span>
+                <span class="dim-diff-label">Input</span>
+                <span class="dim-diff-val ok">2.3%</span>
+              </div>
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot cache"></span>
+                <span class="dim-diff-label">Cache</span>
+                <span class="dim-diff-val ok">1.8%</span>
+              </div>
+            </div>
+          </div>
+          <div class="dim-section">
+            <div class="dim-header output">Output</div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">声称</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment output-claimed" style="left:0;width:92%;"></div>
+              </div>
+              <span class="dim-bar-value">45.2K</span>
+            </div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">审计</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment output-detected" style="left:0;width:88%;"></div>
+              </div>
+              <span class="dim-bar-value">43.8K</span>
+            </div>
+            <div class="dim-diff-row">
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot output"></span>
+                <span class="dim-diff-label">Output</span>
+                <span class="dim-diff-val ok">3.1%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Provider 2: DeepSeek -->
+        <div class="provider-card" onclick="switchProvider(this)">
+          <div class="card-menu-wrap">
+            <button class="card-menu-btn" onclick="event.stopPropagation();toggleMenu(this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            <div class="card-menu-dropdown">
+              <button class="card-menu-item" onclick="event.stopPropagation();">编辑</button>
+              <button class="card-menu-item danger" onclick="event.stopPropagation();showDeleteConfirm()">删除 Provider</button>
+            </div>
+          </div>
+          <div class="provider-card-header">
+            <div class="provider-card-info">
+              <div class="provider-card-name">DeepSeek Official</div>
+              <div class="provider-card-url">https://api.deepseek.com/v1/chat/completions</div>
+              <div class="provider-card-meta">
+                <span class="badge badge-info"><span class="badge-dot"></span>官方</span>
+              </div>
+              <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">deepseek-chat</span>
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">deepseek-coder</span>
+              </div>
+            </div>
+            <div class="provider-card-actions">
+              <div style="text-align:center;">
+                <div class="trust-ring">
+                  <svg viewBox="0 0 56 56">
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#E5E7EB" stroke-width="4"/>
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#059669" stroke-width="4" stroke-dasharray="150.8" stroke-dashoffset="12" stroke-linecap="round"/>
+                  </svg>
+                  <span class="trust-ring-value high">92</span>
+                </div>
+                <div style="font-size:10px;color:var(--gray-400);margin-top:8px;">可信度</div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();" style="margin-top:20px;">切换</button>
+            </div>
+          </div>
+          <div class="dim-section">
+            <div class="dim-header prefill">Prefill</div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">声称</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment input" style="left:0;width:72%;"></div>
+                <div class="dim-bar-segment cache" style="right:0;width:28%;"></div>
+              </div>
+              <span class="dim-bar-value">89.5K</span>
+            </div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">审计</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment input" style="left:0;width:71%;"></div>
+                <div class="dim-bar-segment cache" style="right:0;width:27%;"></div>
+              </div>
+              <span class="dim-bar-value">87.2K</span>
+            </div>
+            <div class="dim-diff-row">
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot input"></span>
+                <span class="dim-diff-label">Input</span>
+                <span class="dim-diff-val ok">1.2%</span>
+              </div>
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot cache"></span>
+                <span class="dim-diff-label">Cache</span>
+                <span class="dim-diff-val ok">0.8%</span>
+              </div>
+            </div>
+          </div>
+          <div class="dim-section">
+            <div class="dim-header output">Output</div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">声称</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment output-claimed" style="left:0;width:95%;"></div>
+              </div>
+              <span class="dim-bar-value">28.6K</span>
+            </div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">审计</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment output-detected" style="left:0;width:93%;"></div>
+              </div>
+              <span class="dim-bar-value">27.9K</span>
+            </div>
+            <div class="dim-diff-row">
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot output"></span>
+                <span class="dim-diff-label">Output</span>
+                <span class="dim-diff-val ok">2.4%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Provider 3: 便宜中转站 -->
+        <div class="provider-card" onclick="switchProvider(this)">
+          <div class="card-menu-wrap">
+            <button class="card-menu-btn" onclick="event.stopPropagation();toggleMenu(this)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            <div class="card-menu-dropdown">
+              <button class="card-menu-item" onclick="event.stopPropagation();">编辑</button>
+              <button class="card-menu-item danger" onclick="event.stopPropagation();showDeleteConfirm()">删除 Provider</button>
+            </div>
+          </div>
+          <div class="provider-card-header">
+            <div class="provider-card-info">
+              <div class="provider-card-name">便宜中转站</div>
+              <div class="provider-card-url">https://relay.example.com/v1</div>
+              <div class="provider-card-meta">
+                <span class="badge badge-neutral"><span class="badge-dot"></span>中转</span>
+              </div>
+              <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">gpt-4o</span>
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">claude-3-haiku</span>
+                <span class="model-tag" onclick="event.stopPropagation();this.classList.toggle('active')">deepseek-chat</span>
+              </div>
+            </div>
+            <div class="provider-card-actions">
+              <div style="text-align:center;">
+                <div class="trust-ring">
+                  <svg viewBox="0 0 56 56">
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#E5E7EB" stroke-width="4"/>
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#D97706" stroke-width="4" stroke-dasharray="150.8" stroke-dashoffset="63" stroke-linecap="round"/>
+                  </svg>
+                  <span class="trust-ring-value medium">58</span>
+                </div>
+                <div style="font-size:10px;color:var(--gray-400);margin-top:8px;">可信度</div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();" style="margin-top:20px;">切换</button>
+            </div>
+          </div>
+          <div class="dim-section">
+            <div class="dim-header prefill">Prefill</div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">声称</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment input" style="left:0;width:70%;"></div>
+                <div class="dim-bar-segment cache" style="right:0;width:30%;"></div>
+              </div>
+              <span class="dim-bar-value">245.0K</span>
+            </div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">审计</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment input" style="left:0;width:55%;"></div>
+                <div class="dim-bar-segment cache" style="right:0;width:20%;"></div>
+              </div>
+              <span class="dim-bar-value">168.0K</span>
+            </div>
+            <div class="dim-diff-row">
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot input"></span>
+                <span class="dim-diff-label">Input</span>
+                <span class="dim-diff-val bad">18.5%</span>
+              </div>
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot cache"></span>
+                <span class="dim-diff-label">Cache</span>
+                <span class="dim-diff-val warn">12.3%</span>
+              </div>
+            </div>
+          </div>
+          <div class="dim-section">
+            <div class="dim-header output">Output</div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">声称</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment output-claimed" style="left:0;width:90%;"></div>
+              </div>
+              <span class="dim-bar-value">82.4K</span>
+            </div>
+            <div class="dim-bar-row">
+              <span class="dim-bar-label">审计</span>
+              <div class="dim-bar-track">
+                <div class="dim-bar-segment output-detected" style="left:0;width:68%;"></div>
+              </div>
+              <span class="dim-bar-value">62.1K</span>
+            </div>
+            <div class="dim-diff-row">
+              <div class="dim-diff-item">
+                <span class="dim-diff-dot output"></span>
+                <span class="dim-diff-label">Output</span>
+                <span class="dim-diff-val bad">24.6%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:32px 0;">
+        <button class="btn btn-secondary btn-lg" onclick="showAddForm()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          添加 Provider
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SETTINGS ==================== -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Settings</h1>
+          <p class="page-subtitle">配置应用偏好与开发者选项</p>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <div class="settings-section-title">基础设置</div>
+          <div class="settings-section-desc">代理端口与语言偏好</div>
+        </div>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-label">代理端口</div>
+              <div class="settings-row-desc">TokenAccountant 代理监听的本地端口号</div>
+            </div>
+            <div class="settings-row-right">
+              <input type="number" class="form-input" value="8080" style="width:100px;">
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-label">界面语言</div>
+              <div class="settings-row-desc">应用界面的显示语言</div>
+            </div>
+            <div class="settings-row-right">
+              <select class="form-input" style="width:140px;">
+                <option>简体中文</option>
+                <option>English</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <div class="settings-section-title">代理设置</div>
+          <div class="settings-section-desc">自动配置与代理行为</div>
+        </div>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-label">启动时自动运行代理</div>
+              <div class="settings-row-desc">应用启动后自动开始代理服务</div>
+            </div>
+            <div class="settings-row-right">
+              <div class="toggle" onclick="this.classList.toggle('active')"><div class="toggle-knob"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section" id="devModeSection">
+        <div class="settings-section-header">
+          <div class="settings-section-title">开发者模式</div>
+          <div class="settings-section-desc">开启后导航栏显示开发者页面</div>
+        </div>
+        <div class="settings-section-body">
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-label">启用开发者模式</div>
+              <div class="settings-row-desc">显示 Developer 页面，查看 detect/store 文本</div>
+            </div>
+            <div class="settings-row-right">
+              <div class="toggle" id="devModeToggle" onclick="toggleDevMode()"><div class="toggle-knob"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="dev-section" id="devSubSection">
+          <div class="dev-warning">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            以下功能仅限开发者使用。修改这些设置可能导致审计数据异常。
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-left">
+              <div class="settings-row-label">DevTrace 缓冲区大小</div>
+              <div class="settings-row-desc">调试追踪缓冲区最大条目数</div>
+            </div>
+            <div class="settings-row-right">
+              <input type="number" class="form-input" value="100" style="width:100px;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <div class="settings-section-title">关于</div>
+        </div>
+        <div class="settings-section-body">
+          <div style="display:flex;align-items:center;gap:24px;">
+            <div style="font-size:13px;color:var(--gray-700);">
+              <div style="margin-bottom:4px;"><strong>TokenAccountant</strong> v0.3.0</div>
+              <div style="color:var(--gray-400);font-size:12px;">Token 透明化审计工具 · 让每一笔 AI 消费都清晰可见</div>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px;">
+              <button class="btn btn-secondary btn-sm">GitHub</button>
+              <button class="btn btn-ghost btn-sm">Changelog</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:16px 0;">
+        <button class="btn btn-primary">保存设置</button>
+      </div>
+    </div>
+
+    <!-- ==================== DEVELOPER ==================== -->
+    <div class="page" id="page-dev">
+      <div class="page-header">
+        <h1 class="page-title">Developer</h1>
+      </div>
+      <div class="dev-panel">
+        <div class="dev-half">
+          <div class="dev-half-header">Store 展平</div>
+          <div class="dev-half-body">Human: 分析这个代码库的性能瓶颈
+
+Assistant: 我来分析这个代码库的性能瓶颈。首先让我看一下项目的整体结构...
+
+关键发现：
+1. 数据库查询在高并发下存在锁争用
+2. Tokenizer 初始化开销较大
+3. 流式转发缺少缓冲
+
+建议优化：
+- 使用连接池替代单连接
+- Tokenizer 实例复用
+- 增加流式缓冲区大小</div>
+        </div>
+        <div class="dev-half">
+          <div class="dev-half-header">Detect 展平</div>
+          <div class="dev-half-body">Human: 分析这个代码库的性能瓶颈
+
+Assistant: 我来分析这个代码库的性能瓶颈。首先让我看一下项目的整体结构...
+
+关键发现：
+1. 数据库查询在高并发下存在锁争用
+2. Tokenizer 初始化开销较大
+3. 流式转发缺少缓冲
+
+建议优化：
+- 使用连接池替代单连接
+- Tokenizer 实例复用
+- 增加流式缓冲区大小</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ========== Delete Confirm Modal ========== -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-box">
+    <div class="modal-title">删除 Provider</div>
+    <div class="modal-desc">确定删除该 Provider？此操作不可撤销，关联的审计记录将保留。</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('deleteModal')">取消</button>
+      <button class="btn btn-danger" onclick="closeModal('deleteModal')">删除</button>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Pie sector dim effect */
+.pie-sector-group { cursor: pointer; }
+.pie-sector-group.dimmed path { opacity: 0.1; transition: opacity 200ms ease; }
+/* Legend hover highlight */
+.legend-item { border-radius: 4px; padding: 1px 4px; margin: 0 -4px; cursor: default; transition: all 150ms ease; }
+.legend-item.highlight { background: rgba(0,0,0,0.04); }
+</style>
+
+<script>
+// ── Pie Chart: Model Token Distribution ──
+// 扇形角度=审计占比，R_audit固定，R_claimed随声称/审计比变化（少报时=R_audit）
+function drawModelPie() {
+  const models = [
+    { name: 'claude-sonnet',   audit: 128, claimed: 146, color: '#60A5FA' },
+    { name: 'gpt-4o',          audit: 72,  claimed: 76,  color: '#FB923C' },
+    { name: 'deepseek-chat',   audit: 32,  claimed: 28,  color: '#34D399' },
+    { name: 'claude-haiku',    audit: 18,  claimed: 19,  color: '#A78BFA' },
+    { name: 'gpt-4-turbo',     audit: 12,  claimed: 15,  color: '#F472B6' },
+    { name: 'Other',           audit: 8,   claimed: 9,   color: '#9CA3AF' },
+  ];
+  const total = models.reduce((s, m) => s + m.audit, 0);
+  const cx = 50, cy = 50, R_audit = 22;
+  const svg = document.getElementById('modelPie');
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+
+  let startAngle = 0;
+  models.forEach(m => {
+    const pct = m.audit / total;
+    const endAngle = startAngle + pct * 360;
+    // 少报时 R_claimed = R_audit，多报时按比例外扩
+    const R_claimed = Math.max(R_audit, R_audit * (m.claimed / m.audit));
+
+    const pt = (r, deg) => ({
+      x: cx + r * Math.cos(deg * Math.PI / 180),
+      y: cy + r * Math.sin(deg * Math.PI / 180),
+    });
+
+    const sa = pt(R_claimed, startAngle);
+    const ea = pt(R_claimed, endAngle);
+    const sa_audit = pt(R_audit, startAngle);
+    const ea_audit = pt(R_audit, endAngle);
+    const largeArc = pct > 0.5 ? 1 : 0;
+
+    const sectorIdx = models.indexOf(m); // 0-based index for linking
+
+    // 弹出方向计算：midAngle 为扇形中间角度，在 rotated frame 中 0°=向上
+    const midAngle = (startAngle + endAngle) / 2;
+    const pullDir = {
+      x: Math.sin(midAngle * Math.PI / 180),
+      y: -Math.cos(midAngle * Math.PI / 180),
+    };
+
+    const sectorGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    sectorGroup.setAttribute('class', 'pie-sector-group');
+    sectorGroup.setAttribute('data-idx', String(sectorIdx));
+    sectorGroup.setAttribute('data-pull-x', pullDir.x.toFixed(3));
+    sectorGroup.setAttribute('data-pull-y', pullDir.y.toFixed(3));
+
+    // 声称层：在最底层，半透明
+    const claimedPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    claimedPath.setAttribute('class', 'pie-claimed');
+    claimedPath.setAttribute('d',
+      `M${cx},${cy} L${sa.x.toFixed(1)},${sa.y.toFixed(1)} ` +
+      `A${R_claimed.toFixed(1)},${R_claimed.toFixed(1)} 0 ${largeArc},1 ${ea.x.toFixed(1)},${ea.y.toFixed(1)} Z`
+    );
+    claimedPath.setAttribute('fill', m.color);
+    claimedPath.setAttribute('fill-opacity', '0.25');
+    sectorGroup.appendChild(claimedPath);
+
+    // 审计层：覆盖在声称层之上，不透明
+    const auditPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    auditPath.setAttribute('d',
+      `M${cx},${cy} L${sa_audit.x.toFixed(1)},${sa_audit.y.toFixed(1)} ` +
+      `A${R_audit},${R_audit} 0 ${largeArc},1 ${ea_audit.x.toFixed(1)},${ea_audit.y.toFixed(1)} Z`
+    );
+    auditPath.setAttribute('fill', m.color);
+    auditPath.setAttribute('fill-opacity', '0.8');
+    sectorGroup.appendChild(auditPath);
+
+    g.appendChild(sectorGroup);
+    startAngle = endAngle;
+  });
+
+  // 白色分隔线：从圆心到最外边缘
+  const maxR = Math.max(R_audit, ...models.map(m => R_audit * Math.max(1, m.claimed / m.audit)));
+  let lineAngle = 0;
+  models.forEach(m => {
+    const pct = m.audit / total;
+    const endAngle = lineAngle + pct * 360;
+    // 只在每个扇形起始边画线（避免最后一个扇形终点与第一个起始重合）
+    const lp = {
+      x: cx + maxR * Math.cos(lineAngle * Math.PI / 180),
+      y: cy + maxR * Math.sin(lineAngle * Math.PI / 180),
+    };
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(cx));
+    line.setAttribute('y1', String(cy));
+    line.setAttribute('x2', String(lp.x.toFixed(1)));
+    line.setAttribute('y2', String(lp.y.toFixed(1)));
+    line.setAttribute('stroke', 'white');
+    line.setAttribute('stroke-width', '0.8');
+    g.appendChild(line);
+    lineAngle = endAngle;
+  });
+
+  svg.appendChild(g);
+  const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  dot.setAttribute('cx', '50'); dot.setAttribute('cy', '50');
+  dot.setAttribute('r', '4'); dot.setAttribute('fill', 'white');
+  svg.appendChild(dot);
+
+  // Legend
+  const legendEl = document.getElementById('pieLegend');
+  legendEl.innerHTML = '';
+  models.forEach(m => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `
+      <span class="legend-dot" style="background:${m.color};"></span>
+      <span class="legend-name">${m.name}</span>
+      <span class="legend-audit">审计 ${m.audit}K</span>
+      <span class="legend-claimed">声称 ${m.claimed}K</span>
+    `;
+    legendEl.appendChild(item);
+  });
+  document.getElementById('pieCaption').textContent =
+    '实心=审计占比 · 半透明外环=声称多出部分';
+}
+drawModelPie();
+
+// ── Pie hover: 当前扇形不变，其他变透明 ──
+(function() {
+  var sectors = document.querySelectorAll('.pie-sector-group');
+  var legendItems = document.querySelectorAll('.legend-item');
+
+  function dimOthers(idx, on) {
+    sectors.forEach(function(sg, i) {
+      sg.classList.toggle('dimmed', on && i !== idx);
+      legendItems[i].classList.toggle('highlight', on && i === idx);
+    });
+  }
+
+  sectors.forEach(function(sg, i) {
+    sg.addEventListener('mouseenter', function() { dimOthers(i, true); });
+    sg.addEventListener('mouseleave', function() { dimOthers(-1, false); });
+  });
+  legendItems.forEach(function(li, i) {
+    li.addEventListener('mouseenter', function() { dimOthers(i, true); });
+    li.addEventListener('mouseleave', function() { dimOthers(-1, false); });
+  });
+})();
+
+// ── Page Switching ──
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector('.nav-item[onclick*="' + name + '"]').classList.add('active');
+}
+
+// ── Proxy Timer + Session Timer ──
+const proxyBtn = document.getElementById('proxyToggle');
+const proxyLabel = document.getElementById('proxyLabel');
+const proxyTimer = document.getElementById('proxyTimer');
+let running = true;
+let seconds = 385;
+let timerInterval;
+
+
+function formatTime(s) {
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return h + ':' + m + ':' + sec;
+}
+
+function toggleProxy() {
+  running = !running;
+  if (running) {
+    proxyBtn.className = 'proxy-btn running';
+    proxyLabel.textContent = '代理运行中';
+    proxyTimer.style.display = 'inline';
+    proxyTimer.textContent = formatTime(seconds);
+    timerInterval = setInterval(() => {
+      seconds++;
+      proxyTimer.textContent = formatTime(seconds);
+    }, 1000);
+  } else {
+    proxyBtn.className = 'proxy-btn stopped';
+    proxyLabel.textContent = '启动代理';
+    proxyTimer.style.display = 'none';
+    clearInterval(timerInterval);
+  }
+}
+proxyBtn.addEventListener('click', toggleProxy);
+if (running) {
+  proxyTimer.style.display = 'inline';
+  proxyTimer.textContent = formatTime(seconds);
+  timerInterval = setInterval(() => {
+    seconds++;
+    proxyTimer.textContent = formatTime(seconds);
+  }, 1000);
+}
+
+// ── Provider Card ──
+function switchProvider(card) {
+  document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+}
+
+// ── Three-dot Menu ──
+function toggleMenu(btn) {
+  const dd = btn.parentElement.querySelector('.card-menu-dropdown');
+  dd.classList.toggle('open');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.card-menu-wrap')) {
+    document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+// ── Modals ──
+function showDeleteConfirm() { document.getElementById('deleteModal').classList.add('open'); }
+function showAddForm() { alert('添加 Provider 表单（Modal）'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ── Dev Mode ──
+function toggleDevMode() {
+  const toggle = document.getElementById('devModeToggle');
+  toggle.classList.toggle('active');
+  const on = toggle.classList.contains('active');
+  document.querySelector('.sidebar').classList.toggle('dev-mode-on', on);
+  document.getElementById('devSubSection').classList.toggle('visible', on);
+}
+</script>
+</body>
+</html>
