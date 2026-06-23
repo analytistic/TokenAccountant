@@ -20,7 +20,7 @@ function diffDisplay(rate: number, tokens: number) {
 
 export default function TodayOverview({ summary, modelBreakdown }: TodayOverviewProps) {
   return (
-    <div className="card flex flex-col">
+    <div className="card flex flex-col shrink-0">
       {/* Stats row */}
       <div className="flex items-center gap-6 px-4 py-3 border-b border-gray-100">
         <div className="flex flex-col">
