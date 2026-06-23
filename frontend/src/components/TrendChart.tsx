@@ -114,17 +114,14 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
           </g>
         ))}
 
-        {!allZero && (
-          <>
-            {/* Diff area */}
-            <path d={diffAreaPath} fill={color} fillOpacity="0.10" />
-            {/* Claimed line (dashed) */}
-            <path d={claimedPath} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.35"
-              strokeLinecap="round" strokeDasharray="4 3" />
-            {/* Audit line (solid) */}
-            <path d={auditPath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
-          </>
-        )}
+        {/* Always render lines — flat at baseline when all zero */}
+        {/* Diff area */}
+        <path d={diffAreaPath} fill={color} fillOpacity="0.10" />
+        {/* Claimed line (dashed) */}
+        <path d={claimedPath} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.35"
+          strokeLinecap="round" strokeDasharray="4 3" />
+        {/* Audit line (solid) */}
+        <path d={auditPath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
       </svg>
 
       {/* Diff rate badge */}
