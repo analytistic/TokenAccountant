@@ -16,14 +16,16 @@ export default function Sidebar() {
         const status = await invoke<{ running: boolean; port: number; uptime_secs: number }>(
           "get_proxy_status"
         );
+        console.log("[INVOKE] get_proxy_status →", status);
         setProxyRunning(status.running);
         setProxyPort(status.port);
         setUptime(status.uptime_secs);
-      } catch (_) { /* ignore */ }
+      } catch (e) { console.error("[INVOKE] get_proxy_status failed", e); }
       try {
         const config = await invoke<{ dev_mode_enabled: boolean }>("get_app_config");
+        console.log("[INVOKE] get_app_config →", config);
         setShowDev(config.dev_mode_enabled);
-      } catch (_) { /* ignore */ }
+      } catch (e) { console.error("[INVOKE] get_app_config failed", e); }
     })();
   }, []);
 
