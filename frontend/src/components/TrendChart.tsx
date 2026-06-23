@@ -27,9 +27,9 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
   const diffColor =
     Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
 
-  // Scale Y
+  // Scale Y — minimum 1K range for readability
   const allValues = [...auditValues, ...claimedValues];
-  const maxVal = Math.max(...allValues, 1);
+  const maxVal = Math.max(...allValues, 1000);
   // Pad Y axis to give headroom
   const yMax = maxVal * 1.15;
 
