@@ -82,6 +82,10 @@ pub fn run() {
             api::commands::get_proxy_status,
             api::commands::list_dev_traces,
             api::commands::clear_dev_traces,
+            api::commands::get_dashboard_data,
+            api::commands::get_provider_detail,
+            api::commands::get_app_config,
+            api::commands::save_app_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running TokenAccountant");

@@ -1,4 +1,5 @@
 use axum::{extract::State, http::{HeaderMap, Request}, body::Body, response::Response};
+use tauri::Emitter;
 use crate::proxy::server::ProxyState;
 use crate::proxy::stream_forwarder::StreamForwarder;
 use crate::auditor::model_detector::{detect, extract_usage};
@@ -129,20 +130,21 @@ async fn forward_with_audit(
 
                     // Store: re-render full conversation WITH the new assistant message,
                     // so cached block hashes match the next request's prompt prefix exactly.
+                    let mut emit_detect_text = String::new();
+                    let mut emit_store_text = String::new();
                     if let Some(ref t) = audit_tokenizer {
-                        // Keep output_msg as-is — reasoning (thinking blocks) is
-                        // preserved because the client echoes it back in subsequent
-                        // requests. The store text must match the detect text prefix.
                         let mut full_conv = conv.clone();
                         full_conv.messages.push(output_msg.clone());
                         let store_text = t.apply_chat_template_with(&full_conv, &audit_params);
                         let ids = t.encode(&store_text);
                         audit_state.cache_detector.lock().await.store_combined(&ids);
 
-                        // Capture store/detect text for DevTraceBuffer
+                        // Capture for both DevTraceBuffer and emit
+                        emit_detect_text = detect_text.clone();
+                        emit_store_text = store_text.clone();
                         audit_state.dev_trace_buffer.lock().await.push(
                             model_name.clone(),
-                            detect_text.clone(),
+                            detect_text,
                             store_text,
                         );
                     }
@@ -154,6 +156,15 @@ async fn forward_with_audit(
                         real_input, real_output, real_cached,
                     );
                     audit_state.db.lock().await.insert_audit_log(&record).ok();
+
+                    // Emit events for frontend refresh
+                    audit_state.app_handle.emit("audit-tick", ()).ok();
+                    audit_state.app_handle.emit("dev-trace", serde_json::json!({
+                        "model": model_name,
+                        "detect_text": emit_detect_text,
+                        "store_text": emit_store_text,
+                    })).ok();
+
                     {
                         let mut s = audit_state.status.lock().await;
                         s.requests_served += 1;

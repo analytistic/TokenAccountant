@@ -21,6 +21,7 @@ pub struct ProxyState {
     pub cache_detector: Arc<Mutex<CacheDetector>>,
     pub db: Arc<Mutex<Database>>,
     pub dev_trace_buffer: Arc<Mutex<crate::auditor::render_inspector::DevTraceBuffer>>,
+    pub app_handle: tauri::AppHandle,
 }
 
 pub struct ProxyServer {
@@ -36,6 +37,7 @@ impl ProxyServer {
         cache_detector: Arc<Mutex<CacheDetector>>,
         db: Arc<Mutex<Database>>,
         dev_trace_buffer: Arc<Mutex<crate::auditor::render_inspector::DevTraceBuffer>>,
+        app_handle: tauri::AppHandle,
     ) -> Self {
         let state = ProxyState {
             config,
@@ -51,6 +53,7 @@ impl ProxyServer {
             cache_detector,
             db,
             dev_trace_buffer,
+            app_handle,
         };
         ProxyServer { state }
     }

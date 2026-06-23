@@ -2,8 +2,11 @@ use tauri::State;
 use crate::provider::types::{Provider, CreateProviderRequest, UpdateProviderRequest};
 use crate::proxy::server::ProxyServer;
 use crate::proxy::types::ProxyStatus;
-use crate::config::app_config::AppConfig;
+use crate::config::app_config::{self, AppConfig};
 use crate::config::cli_config;
+use crate::api::types::{
+    DashboardData, AuditSummary, AppConfigPayload, ProviderWithStats,
+};
 
 pub struct TauriState {
     pub config: AppConfig,
@@ -33,8 +36,9 @@ pub async fn list_audit_logs(
 }
 
 #[tauri::command]
-pub async fn list_providers(state: State<'_, TauriState>) -> Result<Vec<Provider>, String> {
-    state.provider_manager.lock().await.list().await.map_err(|e| e.to_string())
+pub async fn list_providers(state: State<'_, TauriState>) -> Result<Vec<ProviderWithStats>, String> {
+    let db = state.db.lock().await;
+    db.list_providers_with_stats().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -63,7 +67,7 @@ pub async fn switch_provider(state: State<'_, TauriState>, id: String) -> Result
 }
 
 #[tauri::command]
-pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Result<u16, String> {
+pub async fn start_proxy(state: State<'_, TauriState>, app_handle: tauri::AppHandle, bind_addr: String) -> Result<u16, String> {
     let mut proxy_guard = state.proxy_server.lock().await;
     if let Some(server) = proxy_guard.as_ref() {
         let status = server.state.status.lock().await;
@@ -92,6 +96,7 @@ pub async fn start_proxy(state: State<'_, TauriState>, bind_addr: String) -> Res
         state.cache_detector.clone(),
         state.db.clone(),
         state.dev_trace_buffer.clone(),
+        app_handle,
     );
     let (port, handle) = server.start(&bind_addr).await.map_err(|e| e.to_string())?;
 
@@ -165,4 +170,53 @@ pub async fn clear_dev_traces(
     let mut buffer = state.dev_trace_buffer.lock().await;
     buffer.clear();
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_dashboard_data(state: State<'_, TauriState>) -> Result<DashboardData, String> {
+    let db = state.db.lock().await;
+    db.get_dashboard_data().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_provider_detail(
+    state: State<'_, TauriState>,
+    provider_id: String,
+    model: String,
+) -> Result<AuditSummary, String> {
+    let db = state.db.lock().await;
+    db.get_provider_detail(&provider_id, &model).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_app_config(state: State<'_, TauriState>) -> Result<AppConfigPayload, String> {
+    let cfg = &state.config;
+    let port: u16 = cfg.server.bind_addr
+        .split(':')
+        .last()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8080);
+
+    Ok(AppConfigPayload {
+        proxy_port: port,
+        language: cfg.ui.language.clone(),
+        auto_start_proxy: cfg.ui.auto_start_proxy,
+        dev_mode_enabled: cfg.ui.dev_mode_enabled,
+        dev_trace_buffer_size: cfg.ui.dev_trace_buffer_size,
+    })
+}
+
+#[tauri::command]
+pub async fn save_app_config(
+    state: State<'_, TauriState>,
+    config: AppConfigPayload,
+) -> Result<(), String> {
+    let mut cfg = state.config.clone();
+    cfg.server.bind_addr = format!("0.0.0.0:{}", config.proxy_port);
+    cfg.ui.language = config.language;
+    cfg.ui.auto_start_proxy = config.auto_start_proxy;
+    cfg.ui.dev_mode_enabled = config.dev_mode_enabled;
+    cfg.ui.dev_trace_buffer_size = config.dev_trace_buffer_size;
+
+    app_config::save_config(&cfg).map_err(|e| e.to_string())
 }

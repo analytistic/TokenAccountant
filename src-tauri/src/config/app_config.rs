@@ -7,6 +7,8 @@ pub struct AppConfig {
     pub server: ServerConfig,
     pub audit: AuditConfig,
     pub web: WebConfig,
+    #[serde(default)]
+    pub ui: UiConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +55,33 @@ impl Default for AppConfig {
             web: WebConfig {
                 listen_addr: "127.0.0.1:9090".into(),
             },
+            ui: UiConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiConfig {
+    #[serde(default = "default_language")]
+    pub language: String,
+    #[serde(default)]
+    pub auto_start_proxy: bool,
+    #[serde(default)]
+    pub dev_mode_enabled: bool,
+    #[serde(default = "default_dev_trace_buffer_size")]
+    pub dev_trace_buffer_size: u32,
+}
+
+fn default_language() -> String { "zh-CN".into() }
+fn default_dev_trace_buffer_size() -> u32 { 100 }
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        UiConfig {
+            language: default_language(),
+            auto_start_proxy: false,
+            dev_mode_enabled: false,
+            dev_trace_buffer_size: default_dev_trace_buffer_size(),
         }
     }
 }
@@ -83,4 +112,11 @@ pub fn load_config() -> Result<AppConfig> {
         std::fs::write(&path, content)?;
         Ok(config)
     }
+}
+
+pub fn save_config(config: &AppConfig) -> Result<()> {
+    let path = config_path();
+    let content = toml::to_string_pretty(config)?;
+    std::fs::write(&path, content)?;
+    Ok(())
 }
