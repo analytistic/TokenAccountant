@@ -89,7 +89,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const x0 = padding.left + gi * groupW + groupW / 2;
         return icoKeys.map((ico) => {
           const v = g[ico];
-          const barCenterX = x0 + (icoKeys.indexOf(ico) - 1) * (barW * 3 + gap);
+          const barCenterX = x0 + (icoKeys.indexOf(ico) - 1) * (barW + gap);
           const auditH = v.audit > 0 ? (v.audit / yMax) * chartH : 0;
           const claimedH = v.claimed > 0 ? (v.claimed / yMax) * chartH : 0;
 
@@ -151,7 +151,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const v = g[hovered.ico as keyof BarGroup] as { audit: number; claimed: number };
         const x0 = padding.left + hovered.dayIdx * groupW + groupW / 2;
         const icoIdx = icoKeys.indexOf(hovered.ico as typeof icoKeys[number]);
-        const barCenterX = x0 + (icoIdx - 1) * (barW * 3 + gap);
+        const barCenterX = x0 + (icoIdx - 1) * (barW + gap);
         const tooltipW = 110, tooltipH = 38;
         const tx = Math.min(Math.max(barCenterX - tooltipW / 2, 2), svgW - tooltipW - 2);
         return (
