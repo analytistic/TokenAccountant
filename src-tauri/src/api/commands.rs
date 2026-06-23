@@ -14,7 +14,6 @@ pub struct TauriState {
     pub proxy_server: std::sync::Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
     pub proxy_status: std::sync::Arc<tokio::sync::Mutex<ProxyStatus>>,
     pub proxy_handle: std::sync::Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>,
-    pub original_env: std::sync::Arc<tokio::sync::Mutex<Option<serde_json::Value>>>,
     // Audit components
     pub tokenizer_factory: std::sync::Arc<crate::auditor::tokenizer::TokenizerFactory>,
     pub diff_comparator: std::sync::Arc<crate::auditor::diff_comparator::DiffComparator>,
@@ -63,7 +62,32 @@ pub async fn delete_provider(state: State<'_, TauriState>, id: String) -> Result
 
 #[tauri::command]
 pub async fn switch_provider(state: State<'_, TauriState>, id: String) -> Result<Provider, String> {
-    state.provider_manager.lock().await.switch_active(&id).await.map_err(|e| e.to_string())
+    // If proxy is running, stop it first
+    let was_running = {
+        let status = state.proxy_status.lock().await;
+        status.running
+    };
+    if was_running {
+        if let Some(handle) = state.proxy_handle.lock().await.take() {
+            handle.abort();
+        }
+        {
+            let mut status = state.proxy_status.lock().await;
+            status.running = false;
+        }
+        *state.proxy_server.lock().await = None;
+    }
+
+    // Switch active provider
+    let provider = state.provider_manager.lock().await
+        .switch_active(&id).await
+        .map_err(|e| e.to_string())?;
+
+    // Write new provider's URL + key to Claude settings
+    cli_config::write_claude_settings(&provider.api_base_url, &provider.api_key)
+        .map_err(|e| e.to_string())?;
+
+    Ok(provider)
 }
 
 #[tauri::command]
@@ -73,17 +97,6 @@ pub async fn start_proxy(state: State<'_, TauriState>, app_handle: tauri::AppHan
         let status = server.state.status.lock().await;
         if status.running {
             return Err("Proxy already running".into());
-        }
-    }
-
-    // Save original env before overwriting
-    let settings_path = cli_config::claude_settings_path();
-    if settings_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&settings_path) {
-            if let Ok(settings) = serde_json::from_str::<serde_json::Value>(&content) {
-                let orig = settings.get("env").cloned();
-                *state.original_env.lock().await = orig;
-            }
         }
     }
 
@@ -113,7 +126,7 @@ pub async fn start_proxy(state: State<'_, TauriState>, app_handle: tauri::AppHan
 
     *proxy_guard = Some(server);
 
-    // Write proxy settings to ~/.claude/settings.json
+    // Write proxy localhost URL to ~/.claude/settings.json (API key stays same)
     let (api_key, upstream_url) = {
         let pm = state.provider_manager.lock().await;
         let active = pm.get_active().await.ok().flatten();
@@ -123,7 +136,8 @@ pub async fn start_proxy(state: State<'_, TauriState>, app_handle: tauri::AppHan
         )
     };
     tracing::info!("Proxy {} → {}", port, upstream_url);
-    cli_config::write_claude_settings(port, &api_key).map_err(|e| e.to_string())?;
+    let proxy_url = format!("http://localhost:{}", port);
+    cli_config::write_claude_settings(&proxy_url, &api_key).map_err(|e| e.to_string())?;
 
     Ok(port)
 }
@@ -143,9 +157,16 @@ pub async fn stop_proxy(state: State<'_, TauriState>) -> Result<(), String> {
     }
     *state.proxy_server.lock().await = None;
 
-    // Restore Claude settings
-    let orig = state.original_env.lock().await.take();
-    cli_config::restore_claude_settings(orig.as_ref()).map_err(|e| e.to_string())?;
+    // Write provider URL back to Claude settings
+    let (api_key, url) = {
+        let pm = state.provider_manager.lock().await;
+        let active = pm.get_active().await.ok().flatten();
+        (
+            active.as_ref().map(|p| p.api_key.clone()).unwrap_or_default(),
+            active.map(|p| p.api_base_url).unwrap_or_default(),
+        )
+    };
+    cli_config::write_claude_settings(&url, &api_key).map_err(|e| e.to_string())?;
 
     Ok(())
 }

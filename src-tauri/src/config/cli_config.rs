@@ -8,9 +8,12 @@ pub fn claude_settings_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".claude/settings.json"))
 }
 
-/// Write Claude Code settings.json to point to our proxy.
-/// Preserves all existing env fields (model mappings, effort level, etc.)
-pub fn write_claude_settings(proxy_port: u16, api_key: &str) -> Result<()> {
+/// Write Claude Code settings.json to point to the given base URL + API key.
+/// Preserves all existing env fields except ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN.
+/// - Provider selected: write_claude_settings(provider_url, provider_api_key)
+/// - Proxy started:      write_claude_settings("http://localhost:{port}", api_key)
+/// - Proxy stopped:      write_claude_settings(provider_url, provider_api_key)
+pub fn write_claude_settings(base_url: &str, api_key: &str) -> Result<()> {
     let path = claude_settings_path();
     let mut settings = if path.exists() {
         let content = std::fs::read_to_string(&path)?;
@@ -32,7 +35,7 @@ pub fn write_claude_settings(proxy_port: u16, api_key: &str) -> Result<()> {
         })
         .unwrap_or_else(|| serde_json::Map::new());
 
-    env.insert("ANTHROPIC_BASE_URL".into(), json!(format!("http://localhost:{}", proxy_port)));
+    env.insert("ANTHROPIC_BASE_URL".into(), json!(base_url));
     env.insert("ANTHROPIC_AUTH_TOKEN".into(), json!(api_key));
     settings["env"] = Value::Object(env);
 
@@ -49,27 +52,5 @@ pub fn write_claude_settings(proxy_port: u16, api_key: &str) -> Result<()> {
     }
     std::fs::rename(&tmp_path, &path)?;
 
-    Ok(())
-}
-
-/// Restore env settings after proxy stops.
-/// If `original_env` is provided, restore it exactly; otherwise just remove proxy fields.
-pub fn restore_claude_settings(original_env: Option<&Value>) -> Result<()> {
-    let path = claude_settings_path();
-    if !path.exists() {
-        return Ok(());
-    }
-    let content = std::fs::read_to_string(&path)?;
-    let mut settings: Value = serde_json::from_str(&content)?;
-
-    if let Some(orig) = original_env {
-        settings["env"] = orig.clone();
-    } else if let Some(env) = settings.get_mut("env").and_then(|e| e.as_object_mut()) {
-        env.remove("ANTHROPIC_BASE_URL");
-        env.remove("ANTHROPIC_AUTH_TOKEN");
-    }
-
-    let content = serde_json::to_string_pretty(&settings)?;
-    std::fs::write(&path, content)?;
     Ok(())
 }

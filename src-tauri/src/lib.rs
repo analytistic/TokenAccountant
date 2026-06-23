@@ -58,7 +58,6 @@ pub fn run() {
             proxy_server: Arc::new(Mutex::new(None)),
             proxy_status,
             proxy_handle: Arc::new(Mutex::new(None)),
-            original_env: Arc::new(Mutex::new(None)),
             tokenizer_factory: std::sync::Arc::new(tokenizer_factory),
             diff_comparator: std::sync::Arc::new(diff_comparator),
             cache_detector: std::sync::Arc::new(tokio::sync::Mutex::new(cache_detector)),
