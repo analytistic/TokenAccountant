@@ -1,10 +1,30 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { DashboardData, TrendPoint } from "../types";
+import type { DashboardData, TrendPoint, DailyBreakdown } from "../types";
 import { ZERO_TREND_POINT } from "../types";
 
 const QUEUE_SIZE = 20;
+
+/** Pad daily_breakdown to 7 days, filling missing days with zeros */
+function padTo7Days(data: DailyBreakdown[]): DailyBreakdown[] {
+  const today = new Date();
+  const map = new Map<string, DailyBreakdown>();
+  for (const d of data) map.set(d.date, d);
+  const result: DailyBreakdown[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    result.push(map.get(key) ?? {
+      date: key,
+      input_claimed: 0, input_detected: 0,
+      cache_claimed: 0, cache_detected: 0,
+      output_claimed: 0, output_detected: 0,
+    });
+  }
+  return result;
+}
 
 export default function useDashboardData() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -20,6 +40,9 @@ export default function useDashboardData() {
     try {
       const data = await invoke<DashboardData>("get_dashboard_data");
       console.log("[useDashboardData] got data, latest_trend_point:", data.latest_trend_point);
+
+      // Pad daily_breakdown to always have 7 days (missing days = zeros)
+      data.daily_breakdown = padTo7Days(data.daily_breakdown);
 
       setDashboardData((prev) => {
         const isFirstRender = !prev;
