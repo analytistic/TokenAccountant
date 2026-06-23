@@ -47,8 +47,20 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
     }
 
     const t = top.reduce((s, m) => s + m.audit, 0);
-    console.log("[ModelPieChart] data:", data, "sectors:", top, "total:", t);
-    return { sectors: top, total: t };
+    // Minimum visible slice: 3° (0.0083 of 360)
+    const MIN_PCT = 0.0083;
+    const adjusted = top.map(m => ({
+      ...m,
+      pct: t > 0 ? Math.max(MIN_PCT, m.audit / t) : 0,
+    }));
+    // Re-normalize so percentages sum to 1
+    const adjTotal = adjusted.reduce((s, m) => s + m.pct, 0);
+    const sectors = adjusted.map(m => ({
+      ...m,
+      pct: m.pct / adjTotal,
+    }));
+    console.log("[ModelPieChart] data:", data, "sectors:", sectors, "total:", t);
+    return { sectors, total: t };
   }, [data]);
 
   if (!sectors.length) {
@@ -74,11 +86,10 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
         <g transform={`rotate(-90 ${CX} ${CY})`}>
           {sectors.reduce<React.ReactNode[]>((acc, m, i) => {
             let startAngle = 0;
-            // Recalculate startAngle by summing previous
             for (let j = 0; j < i; j++) {
-              startAngle += (sectors[j].audit / total) * 360;
+              startAngle += sectors[j].pct * 360;
             }
-            const pct = m.audit / total;
+            const pct = m.pct;
             const endAngle = startAngle + pct * 360;
             const R_claimed = Math.max(R_AUDIT, R_AUDIT * (m.claimed / Math.max(1, m.audit)));
 
