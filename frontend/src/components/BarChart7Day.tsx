@@ -147,7 +147,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const barCenterX = x0 + (icoIdx - 1) * (barW + gap);
         const tW = 200, tH = 56;
         const barTop = toY(Math.max(v.audit, v.claimed));
-        const ty = Math.max(2, barTop - tH - 6);
+        const ty = Math.max(2, barTop - tH - 14);
         const tx = Math.min(Math.max(barCenterX - tW / 2, 2), VW - tW - 2);
         return (
           <g>
