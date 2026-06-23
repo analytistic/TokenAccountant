@@ -27,14 +27,17 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
   const diffColor =
     Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
 
-  // Scale Y — minimum 1K range for readability
+  // Scale Y — dynamic range, bottom slightly below min data (>= 0)
   const allValues = [...auditValues, ...claimedValues];
-  const maxVal = Math.max(...allValues, 1000);
-  // Pad Y axis to give headroom
-  const yMax = maxVal * 1.15;
+  const dataMin = Math.min(...allValues, 0);
+  const dataMax = Math.max(...allValues, 1);
+  const rawRange = dataMax - dataMin;
+  const yMin = Math.max(0, dataMin - rawRange * 0.1);
+  const yMax = dataMax + rawRange * 0.15;
+  const yRange = yMax - yMin || 1;
 
   const toX = (i: number) => padding.left + (i / (auditValues.length - 1)) * chartW;
-  const toY = (v: number) => padding.top + chartH - (v / yMax) * chartH;
+  const toY = (v: number) => padding.top + chartH - ((v - yMin) / yRange) * chartH;
   const baselineY = padding.top + chartH; // bottom of chart
 
   // Build point arrays
@@ -69,11 +72,11 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
     return d;
   })();
 
-  // Y-axis tick values
+  // Y-axis tick values (bottom, middle, top)
   const ticks = [
-    { value: 0, y: baselineY },
-    { value: yMax / 2, y: toY(yMax / 2) },
-    { value: yMax, y: toY(yMax) },
+    { label: yMin, y: toY(yMin) },
+    { label: (yMin + yMax) / 2, y: toY((yMin + yMax) / 2) },
+    { label: yMax, y: toY(yMax) },
   ];
 
   const allZero = auditValues.every(v => v === 0) && claimedValues.every(v => v === 0);
@@ -97,7 +100,7 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
               stroke="var(--gray-200)" strokeWidth="0.5" />
             <text x={width - padding.right + 8} y={t.y + 3}
               fill="var(--gray-400)" fontSize="8" textAnchor="start">
-              {t.value >= 1000 ? `${(t.value / 1000).toFixed(0)}K` : String(Math.round(t.value))}
+              {t.label >= 1000 ? `${(t.label / 1000).toFixed(0)}K` : String(Math.round(t.label))}
             </text>
           </g>
         ))}
