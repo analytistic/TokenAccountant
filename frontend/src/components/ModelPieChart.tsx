@@ -47,10 +47,14 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
     }
 
     const t = top.reduce((s, m) => s + m.audit, 0);
+    console.log("[ModelPieChart] data:", data, "sectors:", top, "total:", t);
     return { sectors: top, total: t };
   }, [data]);
 
-  if (!sectors.length) return null;
+  if (!sectors.length) {
+    console.log("[ModelPieChart] no sectors, returning null");
+    return null;
+  }
 
   // Polar to cartesian
   const pt = (r: number, deg: number) => ({
