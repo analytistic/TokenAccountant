@@ -146,15 +146,17 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const icoIdx = icoKeys.indexOf(hovered.ico as typeof icoKeys[number]);
         const barCenterX = x0 + (icoIdx - 1) * (barW + gap);
         const tW = 200, tH = 56;
+        const barTop = toY(Math.max(v.audit, v.claimed));
+        const ty = Math.max(2, barTop - tH - 6);
         const tx = Math.min(Math.max(barCenterX - tW / 2, 2), VW - tW - 2);
         return (
           <g>
-            <rect x={tx} y={2} width={tW} height={tH} rx={6}
+            <rect x={tx} y={ty} width={tW} height={tH} rx={6}
               fill="var(--gray-900)" fillOpacity={0.9} />
-            <text x={tx + tW / 2} y={24} fill="white" fontSize="20" textAnchor="middle" fontWeight="700">
+            <text x={tx + tW / 2} y={ty + 22} fill="white" fontSize="20" textAnchor="middle" fontWeight="700">
               {icoKey.toUpperCase()}
             </text>
-            <text x={tx + tW / 2} y={48} fill="var(--gray-300)" fontSize="16" textAnchor="middle">
+            <text x={tx + tW / 2} y={ty + 46} fill="var(--gray-300)" fontSize="16" textAnchor="middle">
               审计 {formatK(v.audit)} · 声称 {formatK(v.claimed)}
             </text>
           </g>
