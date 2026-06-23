@@ -6,8 +6,8 @@ interface BarChart7DayProps {
 }
 
 interface BarGroup {
-  day: string;        // "MM-DD"
-  date: string;       // "YYYY-MM-DD"
+  day: string;
+  date: string;
   input: { audit: number; claimed: number };
   cache: { audit: number; claimed: number };
   output: { audit: number; claimed: number };
@@ -38,7 +38,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
 
   if (!groups.length) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
+      <div className="flex items-center justify-center h-full text-sm text-gray-500">
         暂无统计数据
       </div>
     );
@@ -53,19 +53,18 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   const maxVal = Math.max(...allVals, 1);
   const yMax = Math.ceil(maxVal / 1000) * 1000 || 1000;
 
-  const padding = { top: 12, right: 16, bottom: 28, left: 44 };
+  const padding = { top: 8, right: 8, bottom: 24, left: 34 };
   const svgW = 500, svgH = 200;
   const chartW = svgW - padding.left - padding.right;
   const chartH = svgH - padding.top - padding.bottom;
 
   const groupW = chartW / groups.length;
-  const barW = groupW * 0.14; // each bar width
-  const gap = groupW * 0.02;
+  const barW = groupW * 0.20;
+  const gap = groupW * 0.03;
 
   const toY = (v: number) => padding.top + chartH - (v / yMax) * chartH;
 
   const yTicks = [0, Math.round(yMax / 2), yMax];
-
   const icoKeys = ["input", "cache", "output"] as const;
 
   const formatK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v);
@@ -77,9 +76,9 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
       {yTicks.map((v, i) => (
         <g key={i}>
           <line x1={padding.left} y1={toY(v)} x2={svgW - padding.right} y2={toY(v)}
-            stroke="var(--gray-200)" strokeWidth="0.5" />
-          <text x={padding.left - 6} y={toY(v) + 4}
-            fill="var(--gray-400)" fontSize="9" textAnchor="end">
+            stroke="var(--gray-300)" strokeWidth="0.5" />
+          <text x={padding.left - 6} y={toY(v) + 5}
+            fill="var(--gray-500)" fontSize="11" fontWeight="500" textAnchor="end">
             {formatKAlways(v)}
           </text>
         </g>
@@ -109,10 +108,10 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
                   x={barCenterX - barW / 2}
                   y={toY(v.audit)}
                   width={barW}
-                  height={auditH}
+                  height={Math.max(auditH, 1)}
                   fill={color}
-                  fillOpacity={isHovered ? 1 : 0.8}
-                  rx={1}
+                  fillOpacity={isHovered ? 1 : 0.9}
+                  rx={1.5}
                 />
               )}
               {/* Claimed outline (dashed stroke) */}
@@ -121,13 +120,13 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
                   x={barCenterX - barW / 2}
                   y={toY(v.claimed)}
                   width={barW}
-                  height={claimedH}
+                  height={Math.max(claimedH, 1)}
                   fill="none"
                   stroke={color}
-                  strokeOpacity={0.6}
-                  strokeWidth={1.5}
-                  strokeDasharray="3 2"
-                  rx={1}
+                  strokeOpacity={0.85}
+                  strokeWidth={2}
+                  strokeDasharray="4 2"
+                  rx={1.5}
                 />
               )}
             </g>
@@ -139,8 +138,8 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
       {groups.map((g, gi) => {
         const x0 = padding.left + gi * groupW + groupW / 2;
         return (
-          <text key={gi} x={x0} y={svgH - 6}
-            fill="var(--gray-400)" fontSize="9" textAnchor="middle">
+          <text key={gi} x={x0} y={svgH - 5}
+            fill="var(--gray-600)" fontSize="12" fontWeight="500" textAnchor="middle">
             {g.day}
           </text>
         );
@@ -153,16 +152,16 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
         const x0 = padding.left + hovered.dayIdx * groupW + groupW / 2;
         const icoIdx = icoKeys.indexOf(hovered.ico as typeof icoKeys[number]);
         const barCenterX = x0 + (icoIdx - 1) * (barW * 3 + gap);
-        const tooltipW = 100, tooltipH = 36;
+        const tooltipW = 110, tooltipH = 38;
         const tx = Math.min(Math.max(barCenterX - tooltipW / 2, 2), svgW - tooltipW - 2);
         return (
           <g>
             <rect x={tx} y={4} width={tooltipW} height={tooltipH} rx={6}
-              fill="var(--gray-900)" fillOpacity={0.85} />
-            <text x={tx + tooltipW / 2} y={18} fill="white" fontSize="10" textAnchor="middle" fontWeight={600}>
+              fill="var(--gray-900)" fillOpacity={0.9} />
+            <text x={tx + tooltipW / 2} y={19} fill="white" fontSize="11" textAnchor="middle" fontWeight={700}>
               {hovered.ico.toUpperCase()}
             </text>
-            <text x={tx + tooltipW / 2} y={33} fill="var(--gray-300)" fontSize="9" textAnchor="middle">
+            <text x={tx + tooltipW / 2} y={35} fill="var(--gray-300)" fontSize="10" textAnchor="middle">
               审计 {formatK(v.audit)} · 声称 {formatK(v.claimed)}
             </text>
           </g>
