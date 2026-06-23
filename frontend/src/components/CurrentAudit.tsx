@@ -10,8 +10,43 @@ const ICO = [
   { key: "output" as const, label: "Output", color: "var(--ico-output)" },
 ];
 
+const CX = 32, CY = 32, R = 20;
+
 function formatK(v: number) {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
+}
+
+function PieSlice({
+  startAngle,
+  endAngle,
+  r,
+  color,
+  opacity,
+}: {
+  startAngle: number;
+  endAngle: number;
+  r: number;
+  color: string;
+  opacity: number;
+}) {
+  const pct = (endAngle - startAngle) / 360;
+  const largeArc = pct > 0.5 ? 1 : 0;
+  const toCart = (angle: number) => ({
+    x: CX + r * Math.cos((angle * Math.PI) / 180),
+    y: CY + r * Math.sin((angle * Math.PI) / 180),
+  });
+  const sa = toCart(startAngle);
+  const ea = toCart(endAngle);
+
+  // Full circle: use two 180° arcs
+  let d: string;
+  if (pct > 0.999) {
+    const mid = toCart(startAngle + 180);
+    d = `M${CX},${CY} L${sa.x.toFixed(1)},${sa.y.toFixed(1)} A${r},${r} 0 0,1 ${mid.x.toFixed(1)},${mid.y.toFixed(1)} A${r},${r} 0 0,1 ${ea.x.toFixed(1)},${ea.y.toFixed(1)} Z`;
+  } else {
+    d = `M${CX},${CY} L${sa.x.toFixed(1)},${sa.y.toFixed(1)} A${r},${r} 0 ${largeArc},1 ${ea.x.toFixed(1)},${ea.y.toFixed(1)} Z`;
+  }
+  return <path d={d} fill={color} fillOpacity={opacity} />;
 }
 
 export default function CurrentAudit({ audit }: CurrentAuditProps) {
@@ -23,19 +58,10 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
     );
   }
 
-  const auditTotal = audit.input_audit + audit.cache_audit + audit.output_audit;
-  const claimedTotal = audit.input_claimed + audit.cache_claimed + audit.output_claimed;
-  const maxTotal = Math.max(auditTotal, claimedTotal, 1);
-
-  // Build segmented bar: array of { pct, color }
-  const auditSegs = ICO.map((ico) => ({
-    pct: ((audit[`${ico.key}_audit` as keyof CurrentAuditType] as number) / maxTotal) * 100,
-    color: ico.color,
-  }));
-  const claimedSegs = ICO.map((ico) => ({
-    pct: ((audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number) / maxTotal) * 100,
-    color: ico.color,
-  }));
+  const auditVals = [audit.input_audit, audit.cache_audit, audit.output_audit];
+  const claimedVals = [audit.input_claimed, audit.cache_claimed, audit.output_claimed];
+  const auditTotal = auditVals.reduce((s, v) => s + v, 0);
+  const claimedTotal = claimedVals.reduce((s, v) => s + v, 0);
 
   return (
     <div className="flex flex-col gap-3">
@@ -60,63 +86,71 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
         </span>
       </div>
 
-      {/* Segmented bars: audit row + claimed row */}
-      <div className="flex flex-col gap-2">
-        {/* Audit row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 w-7 text-right shrink-0">审计</span>
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full relative flex overflow-hidden">
-            {auditSegs.map((seg, i) => (
-              <div
-                key={i}
-                className="h-full shrink-0"
-                style={{ width: `${seg.pct}%`, backgroundColor: seg.color }}
-              />
-            ))}
-          </div>
-          <span className="text-[10px] font-semibold text-gray-600 w-11 text-right shrink-0 font-mono">
-            {formatK(auditTotal)}
-          </span>
+      {/* Two pie charts side by side: audit + claimed */}
+      <div className="flex items-start gap-4">
+        {/* Audit pie */}
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-[10px] text-gray-400 font-medium">审计</span>
+          <svg className="w-[64px] h-[64px] shrink-0" viewBox="0 0 64 64">
+            <g transform={`rotate(-90 ${CX} ${CY})`}>
+              {(() => {
+                let a = 0;
+                return ICO.map((ico, i) => {
+                  const pct = auditTotal > 0 ? auditVals[i] / auditTotal : 0;
+                  const sa = a;
+                  a += pct * 360;
+                  return <PieSlice key={i} startAngle={sa} endAngle={a} r={R} color={ico.color} opacity={0.85} />;
+                });
+              })()}
+            </g>
+            <circle cx={CX} cy={CY} r={8} fill="white" />
+            <text x={CX} y={CY + 4} textAnchor="middle" fontSize="8" fontWeight={700} fill="var(--gray-700)">
+              {formatK(auditTotal)}
+            </text>
+          </svg>
         </div>
 
-        {/* Claimed row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-400 w-7 text-right shrink-0">声称</span>
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full relative flex overflow-hidden">
-            {claimedSegs.map((seg, i) => (
-              <div
-                key={i}
-                className="h-full shrink-0 opacity-45"
-                style={{ width: `${seg.pct}%`, backgroundColor: seg.color }}
-              />
-            ))}
-          </div>
-          <span className="text-[10px] font-semibold text-gray-500 w-11 text-right shrink-0 font-mono">
-            {formatK(claimedTotal)}
-          </span>
+        {/* Claimed pie */}
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-[10px] text-gray-400 font-medium">声称</span>
+          <svg className="w-[64px] h-[64px] shrink-0" viewBox="0 0 64 64">
+            <g transform={`rotate(-90 ${CX} ${CY})`}>
+              {(() => {
+                let a = 0;
+                return ICO.map((ico, i) => {
+                  const pct = claimedTotal > 0 ? claimedVals[i] / claimedTotal : 0;
+                  const sa = a;
+                  a += pct * 360;
+                  return <PieSlice key={i} startAngle={sa} endAngle={a} r={R} color={ico.color} opacity={0.4} />;
+                });
+              })()}
+            </g>
+            <circle cx={CX} cy={CY} r={8} fill="white" />
+            <text x={CX} y={CY + 4} textAnchor="middle" fontSize="8" fontWeight={700} fill="var(--gray-500)">
+              {formatK(claimedTotal)}
+            </text>
+          </svg>
         </div>
-      </div>
 
-      {/* Separator + diff rows */}
-      <div className="border-t border-gray-100 pt-2 flex flex-col gap-1.5">
-        {ICO.map((ico) => {
-          const claimed = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
-          const real = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
-          const diff = (audit[`${ico.key}_diff` as keyof CurrentAuditType] as number);
-          const diffRate = claimed > 0 ? ((claimed - real) / claimed) * 100 : 0;
-          const color = Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
-          return (
-            <div key={ico.key} className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
+        {/* Legend */}
+        <div className="flex flex-col gap-1 flex-1">
+          {ICO.map((ico, i) => {
+            const claimed = claimedVals[i];
+            const real = auditVals[i];
+            const diff = claimed - real;
+            const diffRate = claimed > 0 ? (diff / claimed) * 100 : 0;
+            const color = Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
+            return (
+              <div key={ico.key} className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: ico.color }} />
-                {ico.label} 差异
-              </span>
-              <span className="text-[10px] font-mono font-semibold" style={{ color }}>
-                {diff >= 0 ? "+" : ""}{formatK(diff)} ({diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%)
-              </span>
-            </div>
-          );
-        })}
+                <span className="text-[10px] text-gray-500">{ico.label}</span>
+                <span className="text-[10px] font-mono font-semibold ml-auto" style={{ color }}>
+                  {diff >= 0 ? "+" : ""}{formatK(diff)} ({diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%)
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
