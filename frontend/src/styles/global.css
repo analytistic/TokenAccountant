@@ -46,7 +46,7 @@ body {
   gap: 6px;
 }
 .card-title svg { color: var(--gray-400); flex-shrink: 0; }
-.card-body { padding: 16px; flex: 1; }
+.card-body { padding: 10px 14px; flex: 1; }
 
 @keyframes page-in {
   from { opacity: 0; transform: translateY(8px); }
