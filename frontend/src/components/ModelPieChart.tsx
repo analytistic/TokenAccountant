@@ -81,7 +81,16 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
             const pct = m.audit / total;
             const endAngle = startAngle + pct * 360;
             const R_claimed = Math.max(R_AUDIT, R_AUDIT * (m.claimed / Math.max(1, m.audit)));
-            const largeArc = pct > 0.5 ? 1 : 0;
+
+            // Build arc path: for 360° full circle, use two 180° arcs to avoid degenerate case
+            const arcPath = (r: number, sa: {x: number; y: number}, ea: {x: number; y: number}) => {
+              if (pct > 0.999) {
+                const mid = pt(r, startAngle + 180);
+                return `L${sa.x.toFixed(1)},${sa.y.toFixed(1)} A${r.toFixed(1)},${r.toFixed(1)} 0 0,1 ${mid.x.toFixed(1)},${mid.y.toFixed(1)} A${r.toFixed(1)},${r.toFixed(1)} 0 0,1 ${ea.x.toFixed(1)},${ea.y.toFixed(1)}`;
+              }
+              const la = pct > 0.5 ? 1 : 0;
+              return `L${sa.x.toFixed(1)},${sa.y.toFixed(1)} A${r.toFixed(1)},${r.toFixed(1)} 0 ${la},1 ${ea.x.toFixed(1)},${ea.y.toFixed(1)}`;
+            };
 
             const sa = pt(R_claimed, startAngle);
             const ea = pt(R_claimed, endAngle);
@@ -99,13 +108,13 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
               >
                 {/* Claimed layer (translucent outer) */}
                 <path
-                  d={`M${CX},${CY} L${sa.x.toFixed(1)},${sa.y.toFixed(1)} A${R_claimed.toFixed(1)},${R_claimed.toFixed(1)} 0 ${largeArc},1 ${ea.x.toFixed(1)},${ea.y.toFixed(1)} Z`}
+                  d={`M${CX},${CY} ${arcPath(R_claimed, sa, ea)} Z`}
                   fill={m.color}
                   fillOpacity={0.25}
                 />
                 {/* Audit layer (solid inner) */}
                 <path
-                  d={`M${CX},${CY} L${sa_audit.x.toFixed(1)},${sa_audit.y.toFixed(1)} A${R_AUDIT},${R_AUDIT} 0 ${largeArc},1 ${ea_audit.x.toFixed(1)},${ea_audit.y.toFixed(1)} Z`}
+                  d={`M${CX},${CY} ${arcPath(R_AUDIT, sa_audit, ea_audit)} Z`}
                   fill={m.color}
                   fillOpacity={0.8}
                 />
