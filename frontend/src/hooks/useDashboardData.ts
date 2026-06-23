@@ -30,8 +30,15 @@ export default function useDashboardData() {
       });
 
       if (isEvent && data.latest_trend_point) {
-        console.log("[useDashboardData] pushing trend point:", data.latest_trend_point.idx);
-        setTrendQueue((prev) => [...prev.slice(1), data.latest_trend_point!]);
+        setTrendQueue((prev) => {
+          const lastIdx = prev[prev.length - 1]?.idx ?? 0;
+          if (data.latest_trend_point!.idx > lastIdx) {
+            console.log("[useDashboardData] pushing trend point:", data.latest_trend_point!.idx);
+            return [...prev.slice(1), data.latest_trend_point!];
+          }
+          console.log("[useDashboardData] skipping duplicate trend point, idx:", data.latest_trend_point!.idx);
+          return prev;
+        });
       }
 
       setError(null);
