@@ -100,7 +100,7 @@ function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
               stroke="var(--gray-200)" strokeWidth="0.5" />
             <text x={width - padding.right + 8} y={t.y + 3}
               fill="var(--gray-400)" fontSize="9" textAnchor="start">
-              {t.label >= 1000 ? `${(t.label / 1000).toFixed(0)}K` : String(Math.round(t.label))}
+              {(t.label / 1000).toFixed(1).replace(/\.0$/, "") + "K"}
             </text>
           </g>
         ))}

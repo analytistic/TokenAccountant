@@ -69,6 +69,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   const icoKeys = ["input", "cache", "output"] as const;
 
   const formatK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v);
+  const formatKAlways = (v: number) => (v / 1000).toFixed(1).replace(/\.0$/, "") + "K";
 
   return (
     <svg className="w-full h-full" viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="xMidYMid meet">
@@ -79,7 +80,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
             stroke="var(--gray-200)" strokeWidth="0.5" />
           <text x={padding.left - 6} y={toY(v) + 4}
             fill="var(--gray-400)" fontSize="9" textAnchor="end">
-            {formatK(v)}
+            {formatKAlways(v)}
           </text>
         </g>
       ))}
