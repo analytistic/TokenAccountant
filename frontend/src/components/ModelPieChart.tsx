@@ -135,22 +135,26 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
       </svg>
 
       {/* Legend on the right */}
-      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
         {sectors.map((m, i) => (
           <div
             key={i}
-            className={`flex items-center gap-2 text-[11px] px-1 py-0.5 rounded cursor-default transition-colors
+            className={`flex items-start gap-2 text-[11px] px-1.5 py-1 rounded cursor-default transition-colors
               ${dimIdx === i ? "bg-gray-100" : ""}`}
             onMouseEnter={() => setDimIdx(i)}
             onMouseLeave={() => setDimIdx(null)}
           >
-            <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: m.color }} />
-            <span className="text-gray-700 flex-1 truncate">{m.name}</span>
-            <span className="font-mono text-gray-500 tabular-nums">审计 {formatK(m.audit)}</span>
-            <span className="font-mono text-gray-400 tabular-nums">声称 {formatK(m.claimed)}</span>
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0 mt-0.5" style={{ backgroundColor: m.color }} />
+            <div className="flex-1 min-w-0">
+              <span className="text-gray-800 font-medium">{m.name}</span>
+              <div className="flex gap-3 text-[10px] mt-0.5">
+                <span className="font-mono text-gray-500">审计 {formatK(m.audit)}</span>
+                <span className="font-mono text-gray-400">声称 {formatK(m.claimed)}</span>
+              </div>
+            </div>
           </div>
         ))}
-        <p className="text-[9px] text-gray-400">实心=审计占比 · 半透明外环=声称多出部分</p>
+        <p className="text-[9px] text-gray-400 pl-1.5">实心=审计占比 · 半透明外环=声称多出部分</p>
       </div>
     </div>
   );
