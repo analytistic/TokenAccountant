@@ -50,7 +50,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   const chartW = VW - PAD.left - PAD.right;
   const chartH = VH - PAD.top - PAD.bottom;
   const groupW = chartW / groups.length;
-  const barW = Math.max(6, groupW * 0.24);
+  const barW = Math.max(4, groupW * 0.14);
   const gap = groupW * 0.04;
 
   const toY = (v: number) => PAD.top + chartH - (v / yMax) * chartH;
