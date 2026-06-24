@@ -45,7 +45,7 @@ export default function ProviderRanking({ providers, onSwitch }: ProviderRanking
   }
 
   return (
-    <div className="flex flex-col gap-1 overflow-y-auto">
+    <div className="h-full overflow-y-auto flex flex-col gap-1">
       {providers.map((p, i) => (
         <button
           key={p.id}
