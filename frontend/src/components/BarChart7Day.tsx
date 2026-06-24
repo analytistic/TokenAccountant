@@ -5,8 +5,8 @@ interface BarChart7DayProps {
   data: DailyBreakdown[];
 }
 
-const VW = 1000, VH = 380;
-const PAD = { left: 64, right: 12, top: 8, bottom: 16, gap: 24 };
+const VW = 1000, VH = 360;
+const PAD = { left: 64, right: 12, top: 8, bottom: 4, gap: 24 };
 
 export default function BarChart7Day({ data }: BarChart7DayProps) {
   const [hovered, setHovered] = useState<{ section: string; dayIdx: number; ico: string } | null>(null);
@@ -25,22 +25,19 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   }, [data]);
 
   if (!groups.length) {
-    return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-500">暂无统计数据</div>
-    );
+    return <div className="flex items-center justify-center h-full text-sm text-gray-500">暂无统计数据</div>;
   }
 
-  // Prefill scale: max of Input + Cache
+  // Prefill scale
   const prefillVals = groups.flatMap(g => [g.input.audit, g.input.claimed, g.cache.audit, g.cache.claimed]);
   const prefillMax = Math.max(...prefillVals, 1);
   const prefillYMax = Math.ceil(prefillMax / 1000) * 1000 || 1000;
 
-  // Output scale: max of Output
+  // Output scale
   const outputVals = groups.flatMap(g => [g.output.audit, g.output.claimed]);
   const outputMax = Math.max(...outputVals, 1);
   const outputYMax = Math.ceil(outputMax / 1000) * 1000 || 1000;
 
-  // Layout: two chart areas
   const sectionH = (VH - PAD.top - PAD.bottom - PAD.gap) / 2;
   const prefillTop = PAD.top;
   const prefillBottom = prefillTop + sectionH;
@@ -55,7 +52,6 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   const formatK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v);
   const fmtY = (v: number) => (v / 1000).toFixed(1).replace(/\.0$/, "") + "K";
 
-  // Render a single chart section
   const renderSection = (
     label: string,
     labelColor: string,
@@ -70,13 +66,11 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
 
     return (
       <g key={label}>
-        {/* Section label */}
         <text x={PAD.left} y={top + 12}
-          fill={labelColor} fontSize="12" fontWeight="700" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>
+          fill={labelColor} fontSize="12" fontWeight="700"
+          style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>
           {label}
         </text>
-
-        {/* Grid lines + Y-axis */}
         {yTicks.map((v, i) => (
           <g key={i}>
             <line x1={PAD.left} y1={toY(v)} x2={VW - PAD.right} y2={toY(v)}
@@ -87,18 +81,14 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
             </text>
           </g>
         ))}
-
-        {/* Bars */}
         {groups.map((g, gi) => {
           const x0 = PAD.left + gi * groupW + groupW / 2;
           return bars.map((bar, bi) => {
-            const vals = bar.audit[gi] !== undefined ? [bar.audit[gi], bar.claimed[gi]] : [0, 0];
-            const auditVal = vals[0];
-            const claimedVal = vals[1];
+            const vals = [bar.audit[gi] ?? 0, bar.claimed[gi] ?? 0];
+            const auditVal = vals[0], claimedVal = vals[1];
             const barCenterX = x0 + (bi - (bars.length - 1) / 2) * (barW + barGap);
             const auditH = auditVal > 0 ? (auditVal / yMax) * ch : 0;
             const claimedH = claimedVal > 0 ? (claimedVal / yMax) * ch : 0;
-
             const isHovered = hovered?.section === label && hovered?.dayIdx === gi && hovered?.ico === bar.ico;
 
             return (
@@ -125,7 +115,6 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
     );
   };
 
-  // Build bar data for each section
   const prefillBars = [
     { ico: "input", color: "var(--ico-input)", audit: groups.map(g => g.input.audit), claimed: groups.map(g => g.input.claimed) },
     { ico: "cache", color: "var(--ico-cache)", audit: groups.map(g => g.cache.audit), claimed: groups.map(g => g.cache.claimed) },
@@ -135,53 +124,55 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
   ];
 
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none"
-      style={{ width: "100%", height: "100%", display: "block" }}>
-      {/* Prefill section */}
-      {renderSection("Prefill", "var(--ico-input)", prefillTop, prefillBottom, prefillYMax, prefillBars)}
-      {/* Output section */}
-      {renderSection("Output", "var(--ico-output)", outputTop, outputBottom, outputYMax, outputBars)}
+    <div className="w-full h-full flex flex-col">
+      {/* SVG chart — preserveAspectRatio none for bars, but text labels rendered in HTML below */}
+      <div className="flex-1 min-h-0 relative">
+        <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none"
+          style={{ width: "100%", height: "100%", display: "block", position: "absolute", top: 0, left: 0 }}>
+          {renderSection("Prefill", "var(--ico-input)", prefillTop, prefillBottom, prefillYMax, prefillBars)}
+          {renderSection("Output", "var(--ico-output)", outputTop, outputBottom, outputYMax, outputBars)}
 
-      {/* Shared X-axis labels */}
-      {groups.map((g, gi) => {
-        const x0 = PAD.left + gi * groupW + groupW / 2;
-        return (
-          <text key={gi} x={x0} y={VH - 4}
-            fill="var(--gray-600)" fontSize="13" fontWeight="500" textAnchor="middle">
+          {/* Tooltip */}
+          {hovered && (() => {
+            const g = groups[hovered.dayIdx];
+            const icoKey = hovered.ico as "input" | "cache" | "output";
+            const v = g[icoKey];
+            const secBottom = hovered.section === "Prefill" ? prefillBottom : outputBottom;
+            const yMax = hovered.section === "Prefill" ? prefillYMax : outputYMax;
+            const ch = sectionH;
+            const toY = (val: number) => secBottom - (val / yMax) * ch;
+            const x0 = PAD.left + hovered.dayIdx * groupW + groupW / 2;
+            const barsInSec = hovered.section === "Prefill" ? prefillBars : outputBars;
+            const bi = barsInSec.findIndex(b => b.ico === hovered.ico);
+            const barCenterX = x0 + (bi - (barsInSec.length - 1) / 2) * (barW + barGap);
+            const tW = 200, tH = 56;
+            const barTop = toY(Math.max(v.audit, v.claimed));
+            const ty = Math.max(2, barTop - tH - 14);
+            const tx = Math.min(Math.max(barCenterX - tW / 2, 2), VW - tW - 2);
+            return (
+              <g>
+                <rect x={tx} y={ty} width={tW} height={tH} rx={6} fill="var(--gray-900)" fillOpacity={0.9} />
+                <text x={tx + tW / 2} y={ty + 22} fill="white" fontSize="20" textAnchor="middle" fontWeight="700">
+                  {icoKey.toUpperCase()}
+                </text>
+                <text x={tx + tW / 2} y={ty + 46} fill="var(--gray-300)" fontSize="16" textAnchor="middle">
+                  审计 {formatK(v.audit)} · 声称 {formatK(v.claimed)}
+                </text>
+              </g>
+            );
+          })()}
+        </svg>
+      </div>
+
+      {/* X-axis labels — HTML, not stretched by preserveAspectRatio */}
+      <div className="flex items-center shrink-0"
+        style={{ paddingLeft: `${(PAD.left / VW) * 100}%`, paddingRight: `${(PAD.right / VW) * 100}%` }}>
+        {groups.map((g, gi) => (
+          <div key={gi} className="flex-1 text-center text-xs font-medium text-gray-600">
             {g.day}
-          </text>
-        );
-      })}
-
-      {/* Tooltip */}
-      {hovered && (() => {
-        const g = groups[hovered.dayIdx];
-        const icoKey = hovered.ico as "input" | "cache" | "output";
-        const v = g[icoKey];
-        const ch = hovered.section === "Prefill" ? sectionH : sectionH;
-        const yMax = hovered.section === "Prefill" ? prefillYMax : outputYMax;
-        const secBottom = hovered.section === "Prefill" ? prefillBottom : outputBottom;
-        const toY = (val: number) => secBottom - (val / yMax) * ch;
-        const x0 = PAD.left + hovered.dayIdx * groupW + groupW / 2;
-        const barsInSec = hovered.section === "Prefill" ? prefillBars : outputBars;
-        const bi = barsInSec.findIndex(b => b.ico === hovered.ico);
-        const barCenterX = x0 + (bi - (barsInSec.length - 1) / 2) * (barW + barGap);
-        const tW = 200, tH = 56;
-        const barTop = toY(Math.max(v.audit, v.claimed));
-        const ty = Math.max(2, barTop - tH - 14);
-        const tx = Math.min(Math.max(barCenterX - tW / 2, 2), VW - tW - 2);
-        return (
-          <g>
-            <rect x={tx} y={ty} width={tW} height={tH} rx={6} fill="var(--gray-900)" fillOpacity={0.9} />
-            <text x={tx + tW / 2} y={ty + 22} fill="white" fontSize="20" textAnchor="middle" fontWeight="700">
-              {icoKey.toUpperCase()}
-            </text>
-            <text x={tx + tW / 2} y={ty + 46} fill="var(--gray-300)" fontSize="16" textAnchor="middle">
-              审计 {formatK(v.audit)} · 声称 {formatK(v.claimed)}
-            </text>
-          </g>
-        );
-      })()}
-    </svg>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
