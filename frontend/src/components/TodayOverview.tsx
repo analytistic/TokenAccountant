@@ -36,30 +36,24 @@ export default function TodayOverview({ summary, modelBreakdown }: TodayOverview
 
         {/* I/C/O diff rates */}
         <div className="px-4 py-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <span className="w-2 h-2 rounded-sm bg-ico-input" /> Input 差异
-            </span>
-            <span className={`text-[11px] font-mono font-semibold w-20 text-right ${Math.abs(summary.input_diff_rate) < 3 ? "text-success" : Math.abs(summary.input_diff_rate) < 5 ? "text-warning" : "text-danger"}`}>
-              {summary.input_diff_rate >= 0 ? "+" : ""}{summary.input_diff_rate.toFixed(1)}%
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <span className="w-2 h-2 rounded-sm bg-ico-cache" /> Cache 差异
-            </span>
-            <span className={`text-[11px] font-mono font-semibold w-20 text-right ${Math.abs(summary.cache_diff_rate) < 3 ? "text-success" : Math.abs(summary.cache_diff_rate) < 5 ? "text-warning" : "text-danger"}`}>
-              {summary.cache_diff_rate >= 0 ? "+" : ""}{summary.cache_diff_rate.toFixed(1)}%
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <span className="w-2 h-2 rounded-sm bg-ico-output" /> Output 差异
-            </span>
-            <span className={`text-[11px] font-mono font-semibold w-20 text-right ${Math.abs(summary.output_diff_rate) < 3 ? "text-success" : Math.abs(summary.output_diff_rate) < 5 ? "text-warning" : "text-danger"}`}>
-              {summary.output_diff_rate >= 0 ? "+" : ""}{summary.output_diff_rate.toFixed(1)}%
-            </span>
-          </div>
+          {(["input", "cache", "output"] as const).map((key) => {
+            const rate = summary[`${key}_diff_rate`] as number;
+            const tokens = summary[`${key}_diff_tokens`] as number;
+            const color = key === "input" ? "bg-ico-input" : key === "cache" ? "bg-ico-cache" : "bg-ico-output";
+            const label = key === "input" ? "Input" : key === "cache" ? "Cache" : "Output";
+            const c = Math.abs(rate) < 3 ? "text-success" : Math.abs(rate) < 5 ? "text-warning" : "text-danger";
+            const fmtTk = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` : String(tokens);
+            return (
+              <div key={key} className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                  <span className={`w-2 h-2 rounded-sm ${color}`} /> {label} 差异
+                </span>
+                <span className={`text-[11px] font-mono font-semibold text-right ${c}`}>
+                  {rate >= 0 ? "+" : ""}{fmtTk} ({rate >= 0 ? "+" : ""}{rate.toFixed(1)}%)
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
