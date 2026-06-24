@@ -152,7 +152,6 @@ export default function ModelPieChart({ data }: ModelPieChartProps) {
             </div>
           </div>
         ))}
-        <p className="text-[9px] text-gray-400 pl-1.5">实心=审计占比 · 半透明外环=声称多出部分</p>
       </div>
     </div>
   );
