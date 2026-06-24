@@ -34,8 +34,14 @@ export default function TodayOverview({ summary, modelBreakdown }: TodayOverview
           </div>
         </div>
 
-        {/* I/C/O diff rates — 2-column grid */}
-        <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2">
+        {/* I/C/O diff: two-column layout */}
+        <div className="px-4 py-3">
+          {/* Header */}
+          <div className="flex items-center text-[10px] text-gray-400 mb-1.5">
+            <span className="w-14"></span>
+            <span className="flex-1 text-right">差异数</span>
+            <span className="w-16 text-right">差异率</span>
+          </div>
           {(["input", "cache", "output"] as const).map((key) => {
             const rate = summary[`${key}_diff_rate`] as number;
             const tokens = summary[`${key}_diff_tokens`] as number;
@@ -44,11 +50,16 @@ export default function TodayOverview({ summary, modelBreakdown }: TodayOverview
             const c = Math.abs(rate) < 3 ? "text-success" : Math.abs(rate) < 5 ? "text-warning" : "text-danger";
             const fmtTk = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` : String(tokens);
             return (
-              <div key={key} className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-sm shrink-0 ${bg}`} />
-                <span className="text-[11px] text-gray-500">{label}</span>
-                <span className={`text-[11px] font-mono font-semibold ml-auto ${c}`}>
-                  {rate >= 0 ? "+" : ""}{fmtTk} ({rate >= 0 ? "+" : ""}{rate.toFixed(1)}%)
+              <div key={key} className="flex items-center py-0.5">
+                <span className="flex items-center gap-1.5 w-14">
+                  <span className={`w-2 h-2 rounded-sm shrink-0 ${bg}`} />
+                  <span className="text-[11px] text-gray-500">{label}</span>
+                </span>
+                <span className="flex-1 text-[11px] font-mono text-right tabular-nums text-gray-700">
+                  {rate >= 0 ? "+" : ""}{fmtTk}
+                </span>
+                <span className={`w-16 text-[11px] font-mono font-semibold text-right tabular-nums ${c}`}>
+                  {rate >= 0 ? "+" : ""}{rate.toFixed(1)}%
                 </span>
               </div>
             );
