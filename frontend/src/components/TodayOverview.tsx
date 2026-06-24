@@ -11,9 +11,10 @@ function diffDisplay(rate: number, tokens: number) {
     Math.abs(rate) < 3 ? "text-success" : Math.abs(rate) < 5 ? "text-warning" : "text-danger";
   const sign = rate >= 0 ? "+" : "";
   const symbol = rate >= 0 ? "↑" : "↓";
+  const fmtTk = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` : String(tokens);
   return (
-    <span className={`text-xs font-mono font-semibold ${color}`}>
-      {sign}{rate.toFixed(1)}% {symbol}{Math.abs(tokens)}
+    <span className={`text-xs font-mono font-semibold w-28 text-right ${color}`}>
+      {sign}{rate.toFixed(1)}% {symbol}{fmtTk}
     </span>
   );
 }
