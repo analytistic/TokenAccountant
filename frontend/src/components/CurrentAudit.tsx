@@ -23,7 +23,6 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
     );
   }
 
-  // Per-column scale: each ICO type gets its own max(claimed, audit)
   const perMax = ICO.map((ico) => {
     const a = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
     const c = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
@@ -53,7 +52,7 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
         </span>
       </div>
 
-      {/* Header row: I C O labels */}
+      {/* I/C/O labels */}
       <div className="flex items-center gap-2">
         <span className="w-8 shrink-0" />
         {ICO.map((ico) => (
@@ -64,50 +63,31 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
         ))}
       </div>
 
-      {/* Audit row */}
+      {/* Bars: audit + claimed on same track */}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-500 w-8 shrink-0">审计</span>
+        <span className="w-8 shrink-0" />
         {ICO.map((ico, i) => {
-          const val = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
+          const a = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
+          const c = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
           return (
-            <div key={ico.key} className="flex-1 flex items-center gap-1.5 min-w-0">
-              <div className="flex-1 h-2.5 bg-gray-100 relative">
-                <div
-                  className="absolute inset-y-0 left-0"
-                  style={{ width: `${(val / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.85 }}
-                />
-              </div>
-              <span className="text-[10px] font-mono text-gray-600 w-11 shrink-0 text-right tabular-nums">
-                {formatK(val)}
-              </span>
+            <div key={ico.key} className="flex-1 h-3 bg-gray-100 relative min-w-0">
+              {/* Claimed bar (lighter, behind) */}
+              <div
+                className="absolute inset-y-0 left-0"
+                style={{ width: `${(c / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.3 }}
+              />
+              {/* Audit bar (solid, on top) */}
+              <div
+                className="absolute inset-y-0 left-0"
+                style={{ width: `${(a / perMax[i]) * 100}%`, backgroundColor: ico.color }}
+              />
             </div>
           );
         })}
       </div>
 
-      {/* Claimed row */}
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-400 w-8 shrink-0">声称</span>
-        {ICO.map((ico, i) => {
-          const val = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
-          return (
-            <div key={ico.key} className="flex-1 flex items-center gap-1.5 min-w-0">
-              <div className="flex-1 h-2.5 bg-gray-100 relative">
-                <div
-                  className="absolute inset-y-0 left-0"
-                  style={{ width: `${(val / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.4 }}
-                />
-              </div>
-              <span className="text-[10px] font-mono text-gray-500 w-11 shrink-0 text-right tabular-nums">
-                {formatK(val)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Diff row */}
-      <div className="flex items-center gap-2">
+      {/* Table: audit / claimed / diff */}
+      <div className="flex items-start gap-2">
         <span className="w-8 shrink-0" />
         {ICO.map((ico, i) => {
           const a = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
@@ -116,9 +96,22 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
           const diffRate = c > 0 ? (diff / c) * 100 : 0;
           const diffColor = Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
           return (
-            <span key={ico.key} className="flex-1 text-[10px] font-mono font-semibold text-right min-w-0" style={{ color: diffColor }}>
-              {diff >= 0 ? "+" : ""}{formatK(diff)} ({diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%)
-            </span>
+            <div key={ico.key} className="flex-1 flex flex-col min-w-0 text-[10px] font-mono">
+              <div className="flex justify-between tabular-nums">
+                <span className="text-gray-600">审计</span>
+                <span className="text-gray-700 font-semibold">{formatK(a)}</span>
+              </div>
+              <div className="flex justify-between tabular-nums">
+                <span className="text-gray-400">声称</span>
+                <span className="text-gray-500">{formatK(c)}</span>
+              </div>
+              <div className="flex justify-between tabular-nums mt-0.5">
+                <span className="text-gray-400">差异</span>
+                <span className="font-semibold" style={{ color: diffColor }}>
+                  {diff >= 0 ? "+" : ""}{formatK(diff)} ({diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
           );
         })}
       </div>
