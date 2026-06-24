@@ -6,7 +6,7 @@ interface BarChart7DayProps {
 }
 
 const VW = 1000, VH = 380;
-const PAD = { left: 64, right: 12, top: 8, bottom: 8, gap: 24 };
+const PAD = { left: 64, right: 12, top: 8, bottom: 16, gap: 24 };
 
 export default function BarChart7Day({ data }: BarChart7DayProps) {
   const [hovered, setHovered] = useState<{ section: string; dayIdx: number; ico: string } | null>(null);
