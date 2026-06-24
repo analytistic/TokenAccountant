@@ -26,7 +26,13 @@ export default function ProviderCard({
 }: ProviderCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Default name from URL hostname
+  const displayName = provider.name || (() => {
+    try { return new URL(provider.api_base_url).hostname; } catch { return provider.api_base_url; }
+  })();
+
   const handleSwitch = async () => {
+    if (provider.is_active) return; // already active
     try {
       await invoke("switch_provider", { id: provider.id });
       onRefresh();
@@ -56,7 +62,7 @@ export default function ProviderCard({
       <div className="flex items-start justify-between px-4 pt-4 pb-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-gray-900 truncate">{provider.name}</span>
+            <span className="text-sm font-bold text-gray-900 truncate">{displayName}</span>
             {provider.is_active && (
               <span className="text-[9px] font-semibold bg-brand-subtle text-brand px-1.5 py-0.5 rounded">
                 活跃
