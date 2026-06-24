@@ -65,17 +65,17 @@ export default function ProviderRanking({ providers, onSwitch }: ProviderRanking
 
           {/* Credibility + I/C/O diff — pushed to right */}
           <div className="flex items-center gap-3 shrink-0 ml-auto">
-            <span className={`text-lg font-bold font-mono tabular-nums w-10 text-right ${credibilityColor(p.credibility)}`}>
+            <span className={`text-lg font-bold font-mono tabular-nums w-10 text-left ${credibilityColor(p.credibility)}`}>
               {Math.round(p.credibility)}%
             </span>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] text-gray-500 font-mono tabular-nums text-right">
+            <div className="flex flex-col gap-0.5 w-16">
+              <span className="text-[9px] text-gray-500 font-mono tabular-nums">
                 I {p.input_diff_rate >= 0 ? "+" : ""}{p.input_diff_rate.toFixed(1)}%
               </span>
-              <span className="text-[9px] text-gray-500 font-mono tabular-nums text-right">
+              <span className="text-[9px] text-gray-500 font-mono tabular-nums">
                 C {p.cache_diff_rate >= 0 ? "+" : ""}{p.cache_diff_rate.toFixed(1)}%
               </span>
-              <span className="text-[9px] text-gray-500 font-mono tabular-nums text-right">
+              <span className="text-[9px] text-gray-500 font-mono tabular-nums">
                 O {p.output_diff_rate >= 0 ? "+" : ""}{p.output_diff_rate.toFixed(1)}%
               </span>
             </div>
