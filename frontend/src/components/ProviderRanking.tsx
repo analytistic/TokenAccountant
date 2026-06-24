@@ -50,22 +50,22 @@ export default function ProviderRanking({ providers, onSwitch }: ProviderRanking
         <button
           key={p.id}
           onClick={() => handleSwitch(p.id)}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left cursor-pointer w-full"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left cursor-pointer w-full justify-between"
         >
-          {/* Rank */}
-          <span className={`w-5 text-center text-sm font-bold tabular-nums shrink-0 ${medalColor(i)}`}>
-            {medalEmoji(i) || i + 1}
-          </span>
-
-          {/* Name + URL */}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
-            <div className="text-[10px] text-gray-400 truncate">{p.url}</div>
+          {/* Left: rank + name+url */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`w-5 text-center text-sm font-bold tabular-nums shrink-0 ${medalColor(i)}`}>
+              {medalEmoji(i) || i + 1}
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
+              <div className="text-[10px] text-gray-400 truncate">{p.url}</div>
+            </div>
           </div>
 
-          {/* Credibility + I/C/O diff — pushed to right */}
-          <div className="flex items-center gap-3 shrink-0 ml-auto">
-            <span className={`text-lg font-bold font-mono tabular-nums w-10 text-left ${credibilityColor(p.credibility)}`}>
+          {/* Right: credibility + I/C/O diff */}
+          <div className="flex items-center gap-3 shrink-0">
+            <span className={`text-lg font-bold font-mono tabular-nums w-10 ${credibilityColor(p.credibility)}`}>
               {Math.round(p.credibility)}%
             </span>
             <div className="flex flex-col gap-0.5 w-16">
