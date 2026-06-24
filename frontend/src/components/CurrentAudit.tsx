@@ -5,7 +5,7 @@ interface CurrentAuditProps {
 }
 
 function formatK(v: number) {
-  return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
+  return `${(v / 1000).toFixed(1)}K`;
 }
 
 export default function CurrentAudit({ audit }: CurrentAuditProps) {
