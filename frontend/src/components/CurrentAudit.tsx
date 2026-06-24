@@ -23,11 +23,16 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
     );
   }
 
-  const perMax = ICO.map((ico) => {
-    const a = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
-    const c = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
-    return Math.max(a, c, 1);
-  });
+  const auditVals = ICO.map((ico) => audit[`${ico.key}_audit` as keyof CurrentAuditType] as number);
+  const claimedVals = ICO.map((ico) => audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number);
+  const auditTotal = auditVals.reduce((s, v) => s + v, 0);
+  const claimedTotal = claimedVals.reduce((s, v) => s + v, 0);
+  const maxTotal = Math.max(auditTotal, claimedTotal, 1);
+
+  // Build segments: each ICO is a contiguous block in the bar
+  // Audit = solid bar, claimed = lighter extension where claimed > audit
+  let auditOffset = 0;
+  let claimedOffset = 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -52,54 +57,96 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
         </span>
       </div>
 
-      {/* I/C/O labels */}
+      {/* Single segmented bar: audit segments + claimed overhang */}
       <div className="flex items-center gap-2">
-        <span className="w-8 shrink-0" />
-        {ICO.map((ico) => (
-          <span key={ico.key} className="flex-1 flex items-center gap-1.5 min-w-0">
-            <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: ico.color }} />
-            <span className="text-[10px] font-medium text-gray-500">{ico.label}</span>
-          </span>
-        ))}
+        <span className="text-[10px] font-semibold text-gray-500 w-8 shrink-0">审计</span>
+        <div className="flex-1 h-4 bg-gray-100 relative">
+          {/* Audit segments (solid) */}
+          {(() => {
+            auditOffset = 0;
+            return ICO.map((ico, i) => {
+              const w = (auditVals[i] / maxTotal) * 100;
+              const el = (
+                <div
+                  key={`a-${ico.key}`}
+                  className="absolute inset-y-0"
+                  style={{ left: `${auditOffset}%`, width: `${w}%`, backgroundColor: ico.color }}
+                />
+              );
+              auditOffset += w;
+              return el;
+            });
+          })()}
+          {/* Claimed overhang: only where claimed > audit */}
+          {(() => {
+            auditOffset = 0;
+            claimedOffset = 0;
+            return ICO.map((ico, i) => {
+              const aW = (auditVals[i] / maxTotal) * 100;
+              const cW = (claimedVals[i] / maxTotal) * 100;
+              const overhang = Math.max(0, cW - aW);
+              const el = overhang > 0 ? (
+                <div
+                  key={`c-${ico.key}`}
+                  className="absolute inset-y-0"
+                  style={{ left: `${auditOffset + aW}%`, width: `${overhang}%`, backgroundColor: ico.color, opacity: 0.3 }}
+                />
+              ) : null;
+              auditOffset += aW;
+              return el;
+            });
+          })()}
+        </div>
+        <span className="text-[10px] font-mono font-semibold text-gray-700 w-11 text-right shrink-0 tabular-nums">
+          {formatK(auditTotal)}
+        </span>
       </div>
 
-      {/* Bars: audit + claimed on same track */}
+      {/* Claimed total bar */}
       <div className="flex items-center gap-2">
-        <span className="w-8 shrink-0" />
-        {ICO.map((ico, i) => {
-          const a = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
-          const c = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
-          return (
-            <div key={ico.key} className="flex-1 h-3 bg-gray-100 relative min-w-0">
-              {/* Claimed bar (lighter, behind) */}
-              <div
-                className="absolute inset-y-0 left-0"
-                style={{ width: `${(c / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.3 }}
-              />
-              {/* Audit bar (solid, on top) */}
-              <div
-                className="absolute inset-y-0 left-0"
-                style={{ width: `${(a / perMax[i]) * 100}%`, backgroundColor: ico.color }}
-              />
-            </div>
-          );
-        })}
+        <span className="text-[10px] font-semibold text-gray-400 w-8 shrink-0">声称</span>
+        <div className="flex-1 h-4 bg-gray-100 relative">
+          {(() => {
+            claimedOffset = 0;
+            return ICO.map((ico, i) => {
+              const w = (claimedVals[i] / maxTotal) * 100;
+              const el = (
+                <div
+                  key={`cb-${ico.key}`}
+                  className="absolute inset-y-0"
+                  style={{ left: `${claimedOffset}%`, width: `${w}%`, backgroundColor: ico.color, opacity: 0.3 }}
+                />
+              );
+              claimedOffset += w;
+              return el;
+            });
+          })()}
+        </div>
+        <span className="text-[10px] font-mono font-semibold text-gray-500 w-11 text-right shrink-0 tabular-nums">
+          {formatK(claimedTotal)}
+        </span>
       </div>
 
-      {/* Table: audit / claimed / diff */}
+      {/* Table */}
       <div className="flex items-start gap-2">
         <span className="w-8 shrink-0" />
         {ICO.map((ico, i) => {
-          const a = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
-          const c = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
+          const a = auditVals[i];
+          const c = claimedVals[i];
           const diff = c - a;
           const diffRate = c > 0 ? (diff / c) * 100 : 0;
           const diffColor = Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
           return (
             <div key={ico.key} className="flex-1 flex flex-col min-w-0 text-[10px] font-mono">
               <div className="flex justify-between tabular-nums">
-                <span className="text-gray-600">审计</span>
-                <span className="text-gray-700 font-semibold">{formatK(a)}</span>
+                <span className="flex items-center gap-1 text-gray-500">
+                  <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: ico.color }} />
+                  {ico.label}
+                </span>
+              </div>
+              <div className="flex justify-between tabular-nums">
+                <span className="text-gray-400">审计</span>
+                <span className="text-gray-600">{formatK(a)}</span>
               </div>
               <div className="flex justify-between tabular-nums">
                 <span className="text-gray-400">声称</span>
