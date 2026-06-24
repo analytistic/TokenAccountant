@@ -58,27 +58,27 @@ export default function ProviderRanking({ providers, onSwitch }: ProviderRanking
           </span>
 
           {/* Name + URL */}
-          <div className="w-[120px] shrink-0">
+          <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
             <div className="text-[10px] text-gray-400 truncate">{p.url}</div>
           </div>
 
-          {/* Credibility */}
-          <span className={`text-lg font-bold font-mono tabular-nums shrink-0 w-10 ${credibilityColor(p.credibility)}`}>
-            {Math.round(p.credibility)}%
-          </span>
-
-          {/* I/C/O diff */}
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <span className="text-[9px] text-gray-500 font-mono tabular-nums w-[60px] inline-block">
-              I {p.input_diff_rate >= 0 ? "+" : ""}{p.input_diff_rate.toFixed(1)}%
+          {/* Credibility + I/C/O diff — pushed to right */}
+          <div className="flex items-center gap-3 shrink-0 ml-auto">
+            <span className={`text-lg font-bold font-mono tabular-nums w-10 text-right ${credibilityColor(p.credibility)}`}>
+              {Math.round(p.credibility)}%
             </span>
-            <span className="text-[9px] text-gray-500 font-mono tabular-nums w-[60px] inline-block">
-              C {p.cache_diff_rate >= 0 ? "+" : ""}{p.cache_diff_rate.toFixed(1)}%
-            </span>
-            <span className="text-[9px] text-gray-500 font-mono tabular-nums w-[60px] inline-block">
-              O {p.output_diff_rate >= 0 ? "+" : ""}{p.output_diff_rate.toFixed(1)}%
-            </span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] text-gray-500 font-mono tabular-nums text-right">
+                I {p.input_diff_rate >= 0 ? "+" : ""}{p.input_diff_rate.toFixed(1)}%
+              </span>
+              <span className="text-[9px] text-gray-500 font-mono tabular-nums text-right">
+                C {p.cache_diff_rate >= 0 ? "+" : ""}{p.cache_diff_rate.toFixed(1)}%
+              </span>
+              <span className="text-[9px] text-gray-500 font-mono tabular-nums text-right">
+                O {p.output_diff_rate >= 0 ? "+" : ""}{p.output_diff_rate.toFixed(1)}%
+              </span>
+            </div>
           </div>
         </button>
       ))}
