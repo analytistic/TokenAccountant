@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
         {/* Left bottom: BarChart7Day */}
         <div
-          className="card flex flex-col min-h-0"
+          className="card flex flex-col min-h-0 min-w-0"
           style={{ gridColumn: 1, gridRow: 2 }}
         >
           <div className="card-header">
@@ -123,7 +123,7 @@ export default function DashboardPage() {
 
         {/* Right top: TodayOverview + ProviderRanking */}
         <div
-          className="flex flex-col gap-3 min-h-0"
+          className="flex flex-col gap-3 min-h-0 min-w-0"
           style={{ gridColumn: 2, gridRow: 1 }}
         >
           <TodayOverview summary={today_summary} modelBreakdown={model_breakdown} />
@@ -142,7 +142,7 @@ export default function DashboardPage() {
 
         {/* Right bottom: CurrentAudit */}
         <div
-          className="card flex flex-col min-h-0"
+          className="card flex flex-col min-h-0 min-w-0"
           style={{ gridColumn: 2, gridRow: 2 }}
         >
           <div className="card-header">
