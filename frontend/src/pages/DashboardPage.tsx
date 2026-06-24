@@ -85,7 +85,7 @@ export default function DashboardPage() {
       >
         {/* Left top: TrendChart */}
         <div
-          className="card flex flex-col min-h-0"
+          className="card flex flex-col min-h-0 min-w-0"
           style={{ gridColumn: 1, gridRow: 1 }}
         >
           <div className="card-header">
