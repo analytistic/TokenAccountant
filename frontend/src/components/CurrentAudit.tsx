@@ -4,12 +4,6 @@ interface CurrentAuditProps {
   audit: CurrentAuditType | null;
 }
 
-const ICO = [
-  { key: "input" as const, label: "Input", color: "var(--ico-input)" },
-  { key: "cache" as const, label: "Cache", color: "var(--ico-cache)" },
-  { key: "output" as const, label: "Output", color: "var(--ico-output)" },
-];
-
 function formatK(v: number) {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
 }
@@ -23,11 +17,10 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
     );
   }
 
-  const auditVals = ICO.map((ico) => audit[`${ico.key}_audit` as keyof CurrentAuditType] as number);
-  const claimedVals = ICO.map((ico) => audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number);
-  const auditTotal = auditVals.reduce((s, v) => s + v, 0);
-  const claimedTotal = claimedVals.reduce((s, v) => s + v, 0);
-  const scaleMax = Math.max(auditTotal, claimedTotal, 1);
+  const prefillAudit = audit.input_audit + audit.cache_audit;
+  const prefillClaimed = audit.input_claimed + audit.cache_claimed;
+  const prefillMax = Math.max(prefillAudit, prefillClaimed, 1);
+  const outputMax = Math.max(audit.output_audit, audit.output_claimed, 1);
 
   return (
     <div className="flex flex-col gap-3">
@@ -52,76 +45,123 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
         </span>
       </div>
 
-      {/* Audit row */}
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-500 w-7 text-right shrink-0">审计</span>
-        <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
-          {(() => {
-            let left = 0;
-            return ICO.map((ico, i) => {
-              const w = (auditVals[i] / scaleMax) * 100;
-              const el = (
-                <div
-                  key={ico.key}
-                  className="absolute top-0 h-full rounded-sm"
-                  style={{ left: `${left}%`, width: `${w}%`, backgroundColor: ico.color }}
-                />
-              );
-              left += w;
-              return el;
-            });
-          })()}
-        </div>
-        <span className="text-[10px] font-semibold text-gray-600 w-11 text-right shrink-0 font-mono tabular-nums">
-          {formatK(auditTotal)}
+      {/* ===== Prefill section (Input + Cache) ===== */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--ico-input)" }}>
+          Prefill
         </span>
+
+        {/* 声称 row */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-gray-400 w-7 text-right shrink-0">声称</span>
+          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
+            <div
+              className="absolute top-0 h-full rounded-sm"
+              style={{ left: 0, width: `${(audit.input_claimed / prefillMax) * 100}%`, backgroundColor: "var(--ico-input)", opacity: 0.45 }}
+            />
+            <div
+              className="absolute top-0 h-full rounded-sm"
+              style={{ right: 0, width: `${(audit.cache_claimed / prefillMax) * 100}%`, backgroundColor: "var(--ico-cache)", opacity: 0.45 }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-gray-500 w-11 text-right shrink-0 font-mono tabular-nums">
+            {formatK(prefillClaimed)}
+          </span>
+        </div>
+
+        {/* 审计 row */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-gray-500 w-7 text-right shrink-0">审计</span>
+          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
+            <div
+              className="absolute top-0 h-full rounded-sm"
+              style={{ left: 0, width: `${(audit.input_audit / prefillMax) * 100}%`, backgroundColor: "var(--ico-input)" }}
+            />
+            <div
+              className="absolute top-0 h-full rounded-sm"
+              style={{ right: 0, width: `${(audit.cache_audit / prefillMax) * 100}%`, backgroundColor: "var(--ico-cache)" }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-gray-600 w-11 text-right shrink-0 font-mono tabular-nums">
+            {formatK(prefillAudit)}
+          </span>
+        </div>
+
+        {/* Diff row */}
+        <div className="flex items-center gap-4">
+          {(["input", "cache"] as const).map((k) => {
+            const a = audit[`${k}_audit`] as number;
+            const c = audit[`${k}_claimed`] as number;
+            const diff = c - a;
+            const rate = c > 0 ? (diff / c) * 100 : 0;
+            const color = Math.abs(rate) < 3 ? "var(--success)" : Math.abs(rate) < 5 ? "var(--warning)" : "var(--danger)";
+            const dot = k === "input" ? "var(--ico-input)" : "var(--ico-cache)";
+            return (
+              <span key={k} className="flex items-center gap-1 text-[10px]">
+                <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: dot }} />
+                <span className="text-gray-500">{k === "input" ? "Input" : "Cache"}</span>
+                <span className="font-mono font-semibold" style={{ color }}>
+                  {diff >= 0 ? "+" : ""}{rate.toFixed(1)}%
+                </span>
+              </span>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Claimed row */}
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-400 w-7 text-right shrink-0">声称</span>
-        <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
-          {(() => {
-            let left = 0;
-            return ICO.map((ico, i) => {
-              const w = (claimedVals[i] / scaleMax) * 100;
-              const el = (
-                <div
-                  key={ico.key}
-                  className="absolute top-0 h-full rounded-sm opacity-45"
-                  style={{ left: `${left}%`, width: `${w}%`, backgroundColor: ico.color }}
-                />
-              );
-              left += w;
-              return el;
-            });
-          })()}
-        </div>
-        <span className="text-[10px] font-semibold text-gray-500 w-11 text-right shrink-0 font-mono tabular-nums">
-          {formatK(claimedTotal)}
+      {/* ===== Output section ===== */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--ico-output)" }}>
+          Output
         </span>
-      </div>
 
-      {/* Separator + I/C/O diff rows */}
-      <div className="border-t border-gray-100 pt-2 flex flex-col gap-1.5">
-        {ICO.map((ico, i) => {
-          const a = auditVals[i];
-          const c = claimedVals[i];
-          const diff = c - a;
-          const diffRate = c > 0 ? (diff / c) * 100 : 0;
-          const diffColor = Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
-          return (
-            <div key={ico.key} className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: ico.color }} />
-                {ico.label} 差异
-              </span>
-              <span className="text-[10px] font-mono font-semibold" style={{ color: diffColor }}>
-                {diff >= 0 ? "+" : ""}{formatK(diff)} ({diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%)
-              </span>
-            </div>
-          );
-        })}
+        {/* 声称 row */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-gray-400 w-7 text-right shrink-0">声称</span>
+          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
+            <div
+              className="absolute top-0 h-full rounded-sm"
+              style={{ left: 0, width: `${(audit.output_claimed / outputMax) * 100}%`, backgroundColor: "var(--ico-output)", opacity: 0.45 }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-gray-500 w-11 text-right shrink-0 font-mono tabular-nums">
+            {formatK(audit.output_claimed)}
+          </span>
+        </div>
+
+        {/* 审计 row */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold text-gray-500 w-7 text-right shrink-0">审计</span>
+          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
+            <div
+              className="absolute top-0 h-full rounded-sm"
+              style={{ left: 0, width: `${(audit.output_audit / outputMax) * 100}%`, backgroundColor: "var(--ico-output)" }}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-gray-600 w-11 text-right shrink-0 font-mono tabular-nums">
+            {formatK(audit.output_audit)}
+          </span>
+        </div>
+
+        {/* Diff row */}
+        <div className="flex items-center gap-1 text-[10px]">
+          <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: "var(--ico-output)" }} />
+          <span className="text-gray-500">Output</span>
+          <span className="font-mono font-semibold ml-1" style={{ color: (() => {
+            const c = audit.output_claimed;
+            const a = audit.output_audit;
+            const rate = c > 0 ? ((c - a) / c) * 100 : 0;
+            return Math.abs(rate) < 3 ? "var(--success)" : Math.abs(rate) < 5 ? "var(--warning)" : "var(--danger)";
+          })() }}>
+            {(() => {
+              const c = audit.output_claimed;
+              const a = audit.output_audit;
+              const diff = c - a;
+              const rate = c > 0 ? (diff / c) * 100 : 0;
+              return `${diff >= 0 ? "+" : ""}${rate.toFixed(1)}%`;
+            })()}
+          </span>
+        </div>
       </div>
     </div>
   );
