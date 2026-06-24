@@ -114,8 +114,8 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
                 )}
                 {claimedH > 0 && (
                   <rect x={barCenterX - barW / 2} y={toY(claimedVal)} width={barW}
-                    height={Math.max(claimedH, 1)} fill="none" stroke={bar.color}
-                    strokeOpacity={0.85} strokeWidth={2} strokeDasharray="4 2" rx={1.5} />
+                    height={Math.max(claimedH, 1)} fill={bar.color}
+                    fillOpacity={0.35} rx={1.5} />
                 )}
               </g>
             );
