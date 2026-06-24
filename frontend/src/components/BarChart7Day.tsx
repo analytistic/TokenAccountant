@@ -5,18 +5,11 @@ interface BarChart7DayProps {
   data: DailyBreakdown[];
 }
 
-const ICO_COLORS = {
-  input: "var(--ico-input)",
-  cache: "var(--ico-cache)",
-  output: "var(--ico-output)",
-};
-
-// Fixed internal coordinate system — SVG will stretch to fill container
-const VW = 1000, VH = 200;
-const PAD = { top: 6, right: 12, bottom: 24, left: 64 };
+const VW = 1000, VH = 380;
+const PAD = { left: 64, right: 12, top: 8, bottom: 8, gap: 24 };
 
 export default function BarChart7Day({ data }: BarChart7DayProps) {
-  const [hovered, setHovered] = useState<{ dayIdx: number; ico: string } | null>(null);
+  const [hovered, setHovered] = useState<{ section: string; dayIdx: number; ico: string } | null>(null);
 
   const groups = useMemo(() => {
     return data.map((d) => {
@@ -33,105 +26,128 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
 
   if (!groups.length) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-500">
-        暂无统计数据
-      </div>
+      <div className="flex items-center justify-center h-full text-sm text-gray-500">暂无统计数据</div>
     );
   }
 
-  const allVals = groups.flatMap(g => [
-    g.input.audit, g.input.claimed,
-    g.cache.audit, g.cache.claimed,
-    g.output.audit, g.output.claimed,
-  ]);
-  const maxVal = Math.max(...allVals, 1);
-  const yMax = Math.ceil(maxVal / 1000) * 1000 || 1000;
+  // Prefill scale: max of Input + Cache
+  const prefillVals = groups.flatMap(g => [g.input.audit, g.input.claimed, g.cache.audit, g.cache.claimed]);
+  const prefillMax = Math.max(...prefillVals, 1);
+  const prefillYMax = Math.ceil(prefillMax / 1000) * 1000 || 1000;
+
+  // Output scale: max of Output
+  const outputVals = groups.flatMap(g => [g.output.audit, g.output.claimed]);
+  const outputMax = Math.max(...outputVals, 1);
+  const outputYMax = Math.ceil(outputMax / 1000) * 1000 || 1000;
+
+  // Layout: two chart areas
+  const sectionH = (VH - PAD.top - PAD.bottom - PAD.gap) / 2;
+  const prefillTop = PAD.top;
+  const prefillBottom = prefillTop + sectionH;
+  const outputTop = prefillBottom + PAD.gap;
+  const outputBottom = outputTop + sectionH;
 
   const chartW = VW - PAD.left - PAD.right;
-  const chartH = VH - PAD.top - PAD.bottom;
   const groupW = chartW / groups.length;
-  const barW = Math.max(4, groupW * 0.14);
-  const gap = groupW * 0.04;
-
-  const toY = (v: number) => PAD.top + chartH - (v / yMax) * chartH;
-  const yTicks = [0, Math.round(yMax / 2), yMax];
-  const icoKeys = ["input", "cache", "output"] as const;
+  const barW = Math.max(4, groupW * 0.18);
+  const barGap = groupW * 0.04;
 
   const formatK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v);
   const fmtY = (v: number) => (v / 1000).toFixed(1).replace(/\.0$/, "") + "K";
 
+  // Render a single chart section
+  const renderSection = (
+    label: string,
+    labelColor: string,
+    top: number,
+    bottom: number,
+    yMax: number,
+    bars: { ico: string; color: string; audit: number[]; claimed: number[] }[]
+  ) => {
+    const ch = bottom - top;
+    const toY = (v: number) => bottom - (v / yMax) * ch;
+    const yTicks = [0, Math.round(yMax / 2), yMax];
+
+    return (
+      <g key={label}>
+        {/* Section label */}
+        <text x={PAD.left} y={top + 12}
+          fill={labelColor} fontSize="12" fontWeight="700" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>
+          {label}
+        </text>
+
+        {/* Grid lines + Y-axis */}
+        {yTicks.map((v, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={toY(v)} x2={VW - PAD.right} y2={toY(v)}
+              stroke="var(--gray-300)" strokeWidth="0.5" />
+            <text x={PAD.left - 8} y={toY(v) + 6}
+              fill="var(--gray-500)" fontSize="13" fontWeight="500" textAnchor="end">
+              {fmtY(v)}
+            </text>
+          </g>
+        ))}
+
+        {/* Bars */}
+        {groups.map((g, gi) => {
+          const x0 = PAD.left + gi * groupW + groupW / 2;
+          return bars.map((bar, bi) => {
+            const vals = bar.audit[gi] !== undefined ? [bar.audit[gi], bar.claimed[gi]] : [0, 0];
+            const auditVal = vals[0];
+            const claimedVal = vals[1];
+            const barCenterX = x0 + (bi - (bars.length - 1) / 2) * (barW + barGap);
+            const auditH = auditVal > 0 ? (auditVal / yMax) * ch : 0;
+            const claimedH = claimedVal > 0 ? (claimedVal / yMax) * ch : 0;
+
+            const isHovered = hovered?.section === label && hovered?.dayIdx === gi && hovered?.ico === bar.ico;
+
+            return (
+              <g key={`${gi}-${bar.ico}`}
+                onMouseEnter={() => setHovered({ section: label, dayIdx: gi, ico: bar.ico })}
+                onMouseLeave={() => setHovered(null)}
+                className="cursor-pointer"
+              >
+                {auditH > 0 && (
+                  <rect x={barCenterX - barW / 2} y={toY(auditVal)} width={barW}
+                    height={Math.max(auditH, 1)} fill={bar.color}
+                    fillOpacity={isHovered ? 1 : 0.9} rx={1.5} />
+                )}
+                {claimedH > 0 && (
+                  <rect x={barCenterX - barW / 2} y={toY(claimedVal)} width={barW}
+                    height={Math.max(claimedH, 1)} fill="none" stroke={bar.color}
+                    strokeOpacity={0.85} strokeWidth={2} strokeDasharray="4 2" rx={1.5} />
+                )}
+              </g>
+            );
+          });
+        })}
+      </g>
+    );
+  };
+
+  // Build bar data for each section
+  const prefillBars = [
+    { ico: "input", color: "var(--ico-input)", audit: groups.map(g => g.input.audit), claimed: groups.map(g => g.input.claimed) },
+    { ico: "cache", color: "var(--ico-cache)", audit: groups.map(g => g.cache.audit), claimed: groups.map(g => g.cache.claimed) },
+  ];
+  const outputBars = [
+    { ico: "output", color: "var(--ico-output)", audit: groups.map(g => g.output.audit), claimed: groups.map(g => g.output.claimed) },
+  ];
+
   return (
-    <svg
-      viewBox={`0 0 ${VW} ${VH}`}
-      preserveAspectRatio="none"
-      style={{ width: "100%", height: "100%", display: "block" }}
-    >
-      {/* Grid lines */}
-      {yTicks.map((v, i) => (
-        <g key={i}>
-          <line x1={PAD.left} y1={toY(v)} x2={VW - PAD.right} y2={toY(v)}
-            stroke="var(--gray-300)" strokeWidth="0.5" />
-          <text x={PAD.left - 8} y={toY(v) + 6}
-            fill="var(--gray-500)" fontSize="14" fontWeight="500" textAnchor="end">
-            {fmtY(v)}
-          </text>
-        </g>
-      ))}
+    <svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none"
+      style={{ width: "100%", height: "100%", display: "block" }}>
+      {/* Prefill section */}
+      {renderSection("Prefill", "var(--ico-input)", prefillTop, prefillBottom, prefillYMax, prefillBars)}
+      {/* Output section */}
+      {renderSection("Output", "var(--ico-output)", outputTop, outputBottom, outputYMax, outputBars)}
 
-      {/* Bars */}
-      {groups.map((g, gi) => {
-        const x0 = PAD.left + gi * groupW + groupW / 2;
-        return icoKeys.map((ico) => {
-          const v = g[ico];
-          const barCenterX = x0 + (icoKeys.indexOf(ico) - 1) * (barW + gap);
-          const auditH = v.audit > 0 ? (v.audit / yMax) * chartH : 0;
-          const claimedH = v.claimed > 0 ? (v.claimed / yMax) * chartH : 0;
-
-          const isHovered = hovered?.dayIdx === gi && hovered?.ico === ico;
-          const color = ICO_COLORS[ico];
-
-          return (
-            <g key={`${gi}-${ico}`}
-              onMouseEnter={() => setHovered({ dayIdx: gi, ico })}
-              onMouseLeave={() => setHovered(null)}
-              className="cursor-pointer"
-            >
-              {auditH > 0 && (
-                <rect
-                  x={barCenterX - barW / 2}
-                  y={toY(v.audit)}
-                  width={barW}
-                  height={Math.max(auditH, 1)}
-                  fill={color}
-                  fillOpacity={isHovered ? 1 : 0.9}
-                  rx={1.5}
-                />
-              )}
-              {claimedH > 0 && (
-                <rect
-                  x={barCenterX - barW / 2}
-                  y={toY(v.claimed)}
-                  width={barW}
-                  height={Math.max(claimedH, 1)}
-                  fill="none"
-                  stroke={color}
-                  strokeOpacity={0.85}
-                  strokeWidth={2}
-                  strokeDasharray="4 2"
-                  rx={1.5}
-                />
-              )}
-            </g>
-          );
-        });
-      })}
-
-      {/* X-axis labels */}
+      {/* Shared X-axis labels */}
       {groups.map((g, gi) => {
         const x0 = PAD.left + gi * groupW + groupW / 2;
         return (
           <text key={gi} x={x0} y={VH - 4}
-            fill="var(--gray-600)" fontSize="14" fontWeight="500" textAnchor="middle">
+            fill="var(--gray-600)" fontSize="13" fontWeight="500" textAnchor="middle">
             {g.day}
           </text>
         );
@@ -140,19 +156,23 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
       {/* Tooltip */}
       {hovered && (() => {
         const g = groups[hovered.dayIdx];
-        const icoKey = hovered.ico as typeof icoKeys[number];
+        const icoKey = hovered.ico as "input" | "cache" | "output";
         const v = g[icoKey];
+        const ch = hovered.section === "Prefill" ? sectionH : sectionH;
+        const yMax = hovered.section === "Prefill" ? prefillYMax : outputYMax;
+        const secBottom = hovered.section === "Prefill" ? prefillBottom : outputBottom;
+        const toY = (val: number) => secBottom - (val / yMax) * ch;
         const x0 = PAD.left + hovered.dayIdx * groupW + groupW / 2;
-        const icoIdx = icoKeys.indexOf(hovered.ico as typeof icoKeys[number]);
-        const barCenterX = x0 + (icoIdx - 1) * (barW + gap);
+        const barsInSec = hovered.section === "Prefill" ? prefillBars : outputBars;
+        const bi = barsInSec.findIndex(b => b.ico === hovered.ico);
+        const barCenterX = x0 + (bi - (barsInSec.length - 1) / 2) * (barW + barGap);
         const tW = 200, tH = 56;
         const barTop = toY(Math.max(v.audit, v.claimed));
         const ty = Math.max(2, barTop - tH - 14);
         const tx = Math.min(Math.max(barCenterX - tW / 2, 2), VW - tW - 2);
         return (
           <g>
-            <rect x={tx} y={ty} width={tW} height={tH} rx={6}
-              fill="var(--gray-900)" fillOpacity={0.9} />
+            <rect x={tx} y={ty} width={tW} height={tH} rx={6} fill="var(--gray-900)" fillOpacity={0.9} />
             <text x={tx + tW / 2} y={ty + 22} fill="white" fontSize="20" textAnchor="middle" fontWeight="700">
               {icoKey.toUpperCase()}
             </text>
