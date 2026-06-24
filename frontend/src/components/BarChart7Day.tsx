@@ -66,8 +66,8 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
 
     return (
       <g key={label}>
-        <text x={PAD.left} y={top + 12}
-          fill={labelColor} fontSize="12" fontWeight="700"
+        <text x={VW - PAD.right} y={top + 12}
+          fill={labelColor} fontSize="12" fontWeight="700" textAnchor="end"
           style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>
           {label}
         </text>
