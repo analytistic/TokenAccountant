@@ -6,7 +6,7 @@ interface BarChart7DayProps {
 }
 
 const VW = 1000, VH = 360;
-const PAD = { left: 64, right: 12, top: 8, bottom: 4, gap: 24 };
+const PAD = { left: 72, right: 12, top: 8, bottom: 4, gap: 24 };
 
 export default function BarChart7Day({ data }: BarChart7DayProps) {
   const [hovered, setHovered] = useState<{ section: string; dayIdx: number; ico: string } | null>(null);
@@ -75,7 +75,7 @@ export default function BarChart7Day({ data }: BarChart7DayProps) {
           <g key={i}>
             <line x1={PAD.left} y1={toY(v)} x2={VW - PAD.right} y2={toY(v)}
               stroke="var(--gray-300)" strokeWidth="0.5" />
-            <text x={PAD.left - 8} y={toY(v) + 6}
+            <text x={PAD.left - 10} y={toY(v) + 6}
               fill="var(--gray-500)" fontSize="13" fontWeight="500" textAnchor="end">
               {fmtY(v)}
             </text>
