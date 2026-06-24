@@ -101,7 +101,7 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
                 <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: dot }} />
                 <span className="text-gray-500">{k === "input" ? "Input" : "Cache"}</span>
                 <span className="font-mono font-semibold" style={{ color }}>
-                  {diff >= 0 ? "+" : ""}{rate.toFixed(1)}%
+                  {diff >= 0 ? "+" : ""}{formatK(diff)}
                 </span>
               </span>
             );
@@ -150,15 +150,15 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
           <span className="font-mono font-semibold ml-1" style={{ color: (() => {
             const c = audit.output_claimed;
             const a = audit.output_audit;
-            const rate = c > 0 ? ((c - a) / c) * 100 : 0;
+            const diff = c - a;
+            const rate = c > 0 ? (diff / c) * 100 : 0;
             return Math.abs(rate) < 3 ? "var(--success)" : Math.abs(rate) < 5 ? "var(--warning)" : "var(--danger)";
           })() }}>
             {(() => {
               const c = audit.output_claimed;
               const a = audit.output_audit;
               const diff = c - a;
-              const rate = c > 0 ? (diff / c) * 100 : 0;
-              return `${diff >= 0 ? "+" : ""}${rate.toFixed(1)}%`;
+              return `${diff >= 0 ? "+" : ""}${formatK(diff)}`;
             })()}
           </span>
         </div>
