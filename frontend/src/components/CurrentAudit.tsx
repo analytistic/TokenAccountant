@@ -94,13 +94,8 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
             <div key={ico.key} className="flex-1 flex items-center gap-1.5 min-w-0">
               <div className="flex-1 h-2.5 bg-gray-100 rounded-sm relative">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-sm border border-dashed"
-                  style={{
-                    width: `${(val / perMax[i]) * 100}%`,
-                    borderColor: ico.color,
-                    opacity: 0.6,
-                    backgroundColor: "transparent",
-                  }}
+                  className="absolute inset-y-0 left-0 rounded-sm"
+                  style={{ width: `${(val / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.4 }}
                 />
               </div>
               <span className="text-[10px] font-mono text-gray-500 w-11 shrink-0 text-right tabular-nums">
