@@ -71,9 +71,9 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
           const val = audit[`${ico.key}_audit` as keyof CurrentAuditType] as number;
           return (
             <div key={ico.key} className="flex-1 flex items-center gap-1.5 min-w-0">
-              <div className="flex-1 h-2.5 bg-gray-100 rounded-sm relative">
+              <div className="flex-1 h-2.5 bg-gray-100 relative">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-sm"
+                  className="absolute inset-y-0 left-0"
                   style={{ width: `${(val / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.85 }}
                 />
               </div>
@@ -92,9 +92,9 @@ export default function CurrentAudit({ audit }: CurrentAuditProps) {
           const val = audit[`${ico.key}_claimed` as keyof CurrentAuditType] as number;
           return (
             <div key={ico.key} className="flex-1 flex items-center gap-1.5 min-w-0">
-              <div className="flex-1 h-2.5 bg-gray-100 rounded-sm relative">
+              <div className="flex-1 h-2.5 bg-gray-100 relative">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-sm"
+                  className="absolute inset-y-0 left-0"
                   style={{ width: `${(val / perMax[i]) * 100}%`, backgroundColor: ico.color, opacity: 0.4 }}
                 />
               </div>
