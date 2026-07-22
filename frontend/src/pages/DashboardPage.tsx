@@ -11,16 +11,18 @@ export default function DashboardPage() {
   // ---- Loading Skeleton ----
   if (loading) {
     return (
-      <div className="h-full flex flex-col p-[24px_32px] gap-3 animate-pulse">
+      <div className="dashboard-scroll">
+        <div className="dashboard-shell gap-3 animate-pulse">
         <div className="flex items-center justify-between shrink-0">
           <div className="h-8 w-32 bg-gray-200 rounded" />
           <div className="h-8 w-20 bg-gray-200 rounded" />
         </div>
-        <div className="flex-1 grid grid-cols-[2fr_1fr] grid-rows-[2fr_1fr] gap-3 min-h-0">
+        <div className="dashboard-grid">
           <div className="bg-gray-100 rounded-lg" />
           <div className="bg-gray-100 rounded-lg" />
           <div className="bg-gray-100 rounded-lg" />
           <div className="bg-gray-100 rounded-lg" />
+        </div>
         </div>
       </div>
     );
@@ -57,7 +59,8 @@ export default function DashboardPage() {
     dashboardData;
 
   return (
-    <div className="h-full flex flex-col p-[24px_32px]">
+    <div className="dashboard-scroll">
+      <div className="dashboard-shell">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <h1 className="text-[28px] font-bold text-gray-900 tracking-tight leading-tight">
@@ -76,17 +79,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Grid */}
-      <div
-        className="flex-1 grid gap-3 min-h-0"
-        style={{
-          gridTemplateColumns: "2fr 1fr",
-          gridTemplateRows: "2fr 1fr",
-        }}
-      >
+      <div className="dashboard-grid">
         {/* Left top: TrendChart */}
         <div
-          className="card flex flex-col min-h-0 min-w-0"
-          style={{ gridColumn: 1, gridRow: 1 }}
+          className="card dashboard-trend flex flex-col min-h-0 min-w-0"
         >
           <div className="card-header">
             <span className="card-title">
@@ -103,8 +99,7 @@ export default function DashboardPage() {
 
         {/* Left bottom: BarChart7Day */}
         <div
-          className="card flex flex-col min-h-0 min-w-0"
-          style={{ gridColumn: 1, gridRow: 2 }}
+          className="card dashboard-history flex flex-col min-h-0 min-w-0"
         >
           <div className="card-header">
             <span className="card-title">
@@ -116,22 +111,21 @@ export default function DashboardPage() {
               近 7 日统计
             </span>
           </div>
-          <div className="card-body flex-1 min-h-0">
+          <div className="card-body flex-1 min-h-0 overflow-hidden">
             <BarChart7Day data={daily_breakdown} />
           </div>
         </div>
 
         {/* Right top: TodayOverview + ProviderRanking */}
         <div
-          className="flex flex-col gap-3 min-h-0 min-w-0"
-          style={{ gridColumn: 2, gridRow: 1 }}
+          className="dashboard-side min-h-0 min-w-0"
         >
           <TodayOverview summary={today_summary} modelBreakdown={model_breakdown} />
-          <div className="card flex flex-col flex-1 min-h-0">
+          <div className="card provider-ranking-card flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="card-header">
               <span className="card-title">Provider 排名</span>
             </div>
-            <div className="card-body flex-1 min-h-0">
+            <div className="card-body provider-ranking-body flex-1 min-h-0 overflow-hidden">
               <ProviderRanking
                 providers={provider_ranking}
                 onSwitch={refresh}
@@ -142,16 +136,16 @@ export default function DashboardPage() {
 
         {/* Right bottom: CurrentAudit */}
         <div
-          className="card flex flex-col min-h-0 min-w-0"
-          style={{ gridColumn: 2, gridRow: 2 }}
+          className="card dashboard-audit flex flex-col min-h-0 min-w-0"
         >
           <div className="card-header">
             <span className="card-title">当前审计</span>
           </div>
-          <div className="card-body flex-1 min-h-0">
+          <div className="card-body flex-1 min-h-0 overflow-hidden">
             <CurrentAudit audit={current_audit} />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

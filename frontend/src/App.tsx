@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import DashboardPage from "./pages/DashboardPage";
 import ProvidersPage from "./pages/ProvidersPage";
 import SettingsPage from "./pages/SettingsPage";
+import DevPage from "./pages/DevPage";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/providers" element={<ProvidersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/dev" element={<DevPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

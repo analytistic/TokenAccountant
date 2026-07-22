@@ -8,15 +8,15 @@ interface TodayOverviewProps {
 
 export default function TodayOverview({ summary, modelBreakdown }: TodayOverviewProps) {
   return (
-    <div className="card flex flex-col flex-1 min-h-0">
+    <div className="card today-overview flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
       <div className="card-header">
         <span className="card-title">今日概览</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="today-overview-body flex-1 min-h-0">
         {/* Stats + Pie row */}
-        <div className="flex items-start gap-4 px-4 py-3 border-b border-gray-100">
+        <div className="today-primary flex items-start gap-4 px-4 py-3 border-b border-gray-100">
           {/* Stats: 可疑/总数 */}
           <div className="flex flex-col shrink-0">
             <span className="text-lg font-bold text-gray-900 tabular-nums">
@@ -29,13 +29,13 @@ export default function TodayOverview({ summary, modelBreakdown }: TodayOverview
             <span className="text-[10px] text-gray-400">可疑 / 请求数</span>
           </div>
           {/* Pie + legend on the right */}
-          <div className="flex-1 min-w-0">
+          <div className="today-models flex-1 min-w-0">
             <ModelPieChart data={modelBreakdown} />
           </div>
         </div>
 
         {/* I/C/O diff: two-column layout */}
-        <div className="px-4 py-3">
+        <div className="today-diffs px-4 py-3">
           {/* Header */}
           <div className="flex items-center text-[10px] text-gray-400 mb-1.5">
             <span className="w-14"></span>

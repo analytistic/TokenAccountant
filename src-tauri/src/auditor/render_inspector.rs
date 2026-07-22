@@ -1,6 +1,3 @@
-use crate::auditor::message_converter::{from_anthropic_body, Conversation, NormalizedMessage};
-use crate::auditor::tokenizer::Tokenizer;
-
 /// A single captured trace from one proxy request.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DevTrace {
@@ -50,25 +47,13 @@ impl DevTraceBuffer {
         self.traces.clear();
         self.counter = 0;
     }
-}
 
-/// Run the detect path and return the rendered text.
-/// Input: raw request body (Anthropic Messages API JSON).
-/// Output: apply_chat_template output.
-pub fn inspect_detect(tokenizer: &dyn Tokenizer, body_str: &str) -> String {
-    let conv = from_anthropic_body(body_str);
-    tokenizer.apply_chat_template(&conv)
-}
-
-/// Run the store path and return the rendered text.
-/// Input: the conversation from the detect phase + the new assistant output message.
-/// Output: apply_chat_template output of conv + output_msg.
-pub fn inspect_store(
-    tokenizer: &dyn Tokenizer,
-    conv: &Conversation,
-    output_msg: &NormalizedMessage,
-) -> String {
-    let mut full_conv = conv.clone();
-    full_conv.messages.push(output_msg.clone());
-    tokenizer.apply_chat_template(&full_conv)
+    pub fn set_max_entries(&mut self, max_entries: usize) {
+        self.max_entries = max_entries.max(1);
+        if self.traces.len() > self.max_entries {
+            let excess = self.traces.len() - self.max_entries;
+            self.traces.drain(0..excess);
+        }
+        self.traces.shrink_to(self.max_entries);
+    }
 }

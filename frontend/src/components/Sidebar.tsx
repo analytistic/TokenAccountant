@@ -13,21 +13,25 @@ export default function Sidebar() {
   useEffect(() => {
     (async () => {
       try {
-        const status = await invoke<{ running: boolean; port: number; uptime_secs: number }>(
-          "get_proxy_status"
-        );
-        console.log("[INVOKE] get_proxy_status →", status);
+        const config = await invoke<{ dev_mode_enabled: boolean; proxy_port: number }>("get_app_config");
+        setShowDev(config.dev_mode_enabled);
+        setProxyPort(config.proxy_port);
+      } catch (e) { console.error("[INVOKE] get_app_config failed", e); }
+      try {
+        const status = await invoke<{ running: boolean; port: number; uptime_secs: number }>("get_proxy_status");
         setProxyRunning(status.running);
-        setProxyPort(status.port);
+        if (status.port > 0) setProxyPort(status.port);
         setUptime(status.uptime_secs);
       } catch (e) { console.error("[INVOKE] get_proxy_status failed", e); }
-      try {
-        const config = await invoke<{ dev_mode_enabled: boolean }>("get_app_config");
-        console.log("[INVOKE] get_app_config →", config);
-        setShowDev(config.dev_mode_enabled);
-      } catch (e) { console.error("[INVOKE] get_app_config failed", e); }
     })();
   }, []);
+
+  useEffect(() => {
+    const unlisten = listen<{ proxy_port: number }>("app-config-changed", (event) => {
+      if (!proxyRunning) setProxyPort(event.payload.proxy_port);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [proxyRunning]);
 
   // Listen for dev-mode changes from Settings page
   useEffect(() => {
@@ -86,7 +90,7 @@ export default function Sidebar() {
             <path d="M8 10l6-4 6 4v8l-6 4-6-4V10z" stroke="#fff" strokeWidth="1.5" fill="none" />
             <circle cx="14" cy="14" r="3" fill="#fff" />
           </svg>
-          <div>
+          <div className="sidebar-brand-copy">
             <div className="text-sm font-bold text-gray-900 tracking-tight leading-tight">
               TokenAccountant
             </div>
@@ -101,7 +105,7 @@ export default function Sidebar() {
           to="/"
           end
           className={({ isActive }) =>
-            `${linkBase} ${isActive ? "bg-brand-subtle text-brand" : "text-gray-600 hover:bg-gray-100"}`
+            `${linkBase} ${isActive ? "bg-brand-subtle text-brand shadow-[inset_3px_0_0_var(--brand)]" : "text-gray-600 hover:bg-gray-100"}`
           }
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -110,13 +114,13 @@ export default function Sidebar() {
             <rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
             <rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
           </svg>
-          仪表盘
+          <span className="sidebar-label">仪表盘</span>
         </NavLink>
 
         <NavLink
           to="/providers"
           className={({ isActive }) =>
-            `${linkBase} ${isActive ? "bg-brand-subtle text-brand" : "text-gray-600 hover:bg-gray-100"}`
+            `${linkBase} ${isActive ? "bg-brand-subtle text-brand shadow-[inset_3px_0_0_var(--brand)]" : "text-gray-600 hover:bg-gray-100"}`
           }
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -124,13 +128,13 @@ export default function Sidebar() {
             <rect x="5" y="7" width="10" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
             <line x1="10" y1="0" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" />
           </svg>
-          Providers
+          <span className="sidebar-label">Providers</span>
         </NavLink>
 
         <NavLink
           to="/settings"
           className={({ isActive }) =>
-            `${linkBase} ${isActive ? "bg-brand-subtle text-brand" : "text-gray-600 hover:bg-gray-100"}`
+            `${linkBase} ${isActive ? "bg-brand-subtle text-brand shadow-[inset_3px_0_0_var(--brand)]" : "text-gray-600 hover:bg-gray-100"}`
           }
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -140,20 +144,20 @@ export default function Sidebar() {
               stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
             />
           </svg>
-          设置
+          <span className="sidebar-label">设置</span>
         </NavLink>
 
         {showDev && (
           <NavLink
             to="/dev"
             className={({ isActive }) =>
-              `${linkBase} ${isActive ? "bg-warning-subtle text-warning" : "text-gray-500 hover:bg-gray-100"}`
+              `${linkBase} ${isActive ? "bg-warning-subtle text-warning shadow-[inset_3px_0_0_var(--warning)]" : "text-gray-500 hover:bg-gray-100"}`
             }
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M7 3l-4 7 4 7M13 3l4 7-4 7M12 2l-4 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            开发者
+            <span className="sidebar-label">开发者</span>
           </NavLink>
         )}
       </nav>
@@ -172,7 +176,9 @@ export default function Sidebar() {
           <span
             className={`w-2 h-2 rounded-full ${proxyRunning ? "bg-success animate-pulse" : "bg-gray-400"}`}
           />
-          {proxyRunning ? `代理运行中 ${formatUptime(uptime)}` : "▶ 启动代理"}
+          <span className="sidebar-proxy-label">
+            {proxyRunning ? `代理运行中 ${formatUptime(uptime)}` : "▶ 启动代理"}
+          </span>
         </button>
       </div>
     </aside>

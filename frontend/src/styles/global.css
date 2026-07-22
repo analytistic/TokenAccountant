@@ -47,6 +47,151 @@ body {
 .card-title svg { color: var(--gray-400); flex-shrink: 0; }
 .card-body { padding: 10px 14px; flex: 1; }
 
+/* Dashboard is a fixed audit workspace. Only long provider lists scroll. */
+.dashboard-scroll {
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboard-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 24px 32px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(270px, 1fr);
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-areas:
+    "trend side"
+    "history audit";
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.dashboard-trend { grid-area: trend; }
+.dashboard-history { grid-area: history; }
+.dashboard-side {
+  grid-area: side;
+  display: grid;
+  container-type: inline-size;
+  container-name: dashboard-side;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.dashboard-audit { grid-area: audit; overflow: hidden; }
+.provider-ranking-body { overflow: hidden; }
+.provider-ranking-card {
+  container-type: inline-size;
+  container-name: provider-ranking;
+}
+
+@container provider-ranking (max-width: 390px) {
+  .provider-rank-diffs { display: none; }
+  .provider-rank-row { padding-left: 8px; padding-right: 8px; }
+  .provider-rank-metrics { gap: 6px; }
+}
+
+@container provider-ranking (max-width: 285px) {
+  .provider-rank-row { gap: 4px; }
+  .provider-rank-row > div:first-child { gap: 5px; }
+  .provider-rank-row .text-sm { font-size: 11px; }
+  .provider-rank-metrics > span { font-size: 14px; }
+}
+
+@container dashboard-side (max-width: 390px) {
+  .today-overview-body {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+  .today-primary {
+    border-bottom: 0;
+    border-right: 1px solid var(--gray-100);
+    padding: 9px 10px;
+  }
+  .today-models { display: none; }
+  .today-diffs { padding: 7px 9px; }
+}
+
+@media (max-height: 760px) {
+  .dashboard-shell {
+    padding: 16px 24px;
+  }
+
+  .dashboard-grid {
+    grid-template-rows: minmax(0, 3fr) minmax(0, 1.65fr);
+  }
+
+  .dashboard-side {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .today-overview-body {
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr);
+  }
+
+  .today-primary {
+    border-bottom: 0;
+    border-right: 1px solid var(--gray-100);
+    padding: 10px 12px;
+  }
+
+  .today-models { display: none; }
+  .today-diffs { padding: 8px 12px; }
+  .today-diffs > div { line-height: 1.25; }
+
+  .dashboard-audit .card-body { padding-top: 8px; padding-bottom: 8px; }
+  .dashboard-audit .card-body > div { gap: 7px; }
+}
+
+@media (max-width: 1150px) {
+  :root { --sidebar-w: 184px; }
+  .dashboard-shell { padding-left: 18px; padding-right: 18px; }
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 0.72fr);
+  }
+
+  .provider-rank-diffs { display: none; }
+
+  .today-overview-body {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+  .today-primary {
+    border-bottom: 0;
+    border-right: 1px solid var(--gray-100);
+    padding: 10px 12px;
+  }
+  .today-models { display: none; }
+  .today-diffs { padding: 8px 10px; }
+}
+
+@media (max-width: 860px) {
+  :root { --sidebar-w: 72px; }
+
+  .sidebar-brand-copy,
+  .sidebar-label,
+  .sidebar-proxy-label { display: none; }
+
+  aside > div:first-child { padding-left: 22px; padding-right: 0; }
+  aside nav { align-items: center; padding-left: 8px; padding-right: 8px; }
+  aside nav > a { width: 48px; justify-content: center; padding-left: 0; padding-right: 0; }
+  aside > div:last-child { padding-left: 12px; padding-right: 12px; }
+  aside > div:last-child button { justify-content: center; padding-left: 0; padding-right: 0; height: 42px; }
+
+  .dashboard-shell { padding: 14px; }
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(218px, 0.65fr);
+    gap: 10px;
+  }
+  .dashboard-side { gap: 10px; }
+}
+
 @keyframes page-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

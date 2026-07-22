@@ -9,7 +9,7 @@ use crate::api::types::{
 };
 
 pub struct TauriState {
-    pub config: AppConfig,
+    pub config: std::sync::Arc<tokio::sync::Mutex<AppConfig>>,
     pub provider_manager: std::sync::Arc<tokio::sync::Mutex<crate::provider::manager::ProviderManager>>,
     pub proxy_server: std::sync::Arc<tokio::sync::Mutex<Option<ProxyServer>>>,
     pub proxy_status: std::sync::Arc<tokio::sync::Mutex<ProxyStatus>>,
@@ -102,7 +102,7 @@ pub async fn start_proxy(state: State<'_, TauriState>, app_handle: tauri::AppHan
 
     // Start proxy server
     let server = ProxyServer::new(
-        state.config.clone(),
+        state.config.lock().await.clone(),
         state.provider_manager.clone(),
         state.tokenizer_factory.clone(),
         state.diff_comparator.clone(),
@@ -211,7 +211,7 @@ pub async fn get_provider_detail(
 
 #[tauri::command]
 pub async fn get_app_config(state: State<'_, TauriState>) -> Result<AppConfigPayload, String> {
-    let cfg = &state.config;
+    let cfg = state.config.lock().await;
     let port: u16 = cfg.server.bind_addr
         .split(':')
         .last()
@@ -232,12 +232,15 @@ pub async fn save_app_config(
     state: State<'_, TauriState>,
     config: AppConfigPayload,
 ) -> Result<(), String> {
-    let mut cfg = state.config.clone();
+    let mut cfg = state.config.lock().await;
     cfg.server.bind_addr = format!("0.0.0.0:{}", config.proxy_port);
     cfg.ui.language = config.language;
     cfg.ui.auto_start_proxy = config.auto_start_proxy;
     cfg.ui.dev_mode_enabled = config.dev_mode_enabled;
     cfg.ui.dev_trace_buffer_size = config.dev_trace_buffer_size;
 
-    app_config::save_config(&cfg).map_err(|e| e.to_string())
+    app_config::save_config(&cfg).map_err(|e| e.to_string())?;
+    state.dev_trace_buffer.lock().await
+        .set_max_entries(config.dev_trace_buffer_size as usize);
+    Ok(())
 }

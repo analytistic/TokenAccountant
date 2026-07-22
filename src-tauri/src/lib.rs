@@ -9,6 +9,7 @@ mod api;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use config::app_config;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,20 +41,20 @@ pub fn run() {
 
     let proxy_status = Arc::new(Mutex::new(proxy::types::ProxyStatus {
         running: false,
-        port: 0,
+        port: cfg.server.bind_addr.split(':').last().and_then(|p| p.parse().ok()).unwrap_or(8080),
         uptime_secs: 0,
         requests_served: 0,
     }));
 
     let dev_trace_buffer = std::sync::Arc::new(tokio::sync::Mutex::new(
-        auditor::render_inspector::DevTraceBuffer::new(100),
+        auditor::render_inspector::DevTraceBuffer::new(cfg.ui.dev_trace_buffer_size as usize),
     ));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .manage(api::commands::TauriState {
-            config: cfg.clone(),
+            config: Arc::new(Mutex::new(cfg.clone())),
             provider_manager,
             proxy_server: Arc::new(Mutex::new(None)),
             proxy_status,
@@ -64,8 +65,18 @@ pub fn run() {
             db: db.clone(),
             dev_trace_buffer: dev_trace_buffer.clone(),
         })
-        .setup(|_app| {
+        .setup(move |app| {
             tracing::info!("TokenAccountant started");
+            if cfg.ui.auto_start_proxy {
+                let app_handle = app.handle().clone();
+                let bind_addr = cfg.server.bind_addr.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<api::commands::TauriState>();
+                    if let Err(error) = api::commands::start_proxy(state, app_handle.clone(), bind_addr).await {
+                        tracing::error!("Failed to auto-start proxy: {}", error);
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

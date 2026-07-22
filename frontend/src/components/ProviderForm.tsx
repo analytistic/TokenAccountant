@@ -61,7 +61,7 @@ export default function ProviderForm({ provider, open, onClose, onSaved }: Provi
           },
         });
       } else {
-        await invoke("create_provider", {
+        const created = await invoke<{ id: string }>("create_provider", {
           req: {
             name,
             provider_type: "relay",
@@ -71,8 +71,7 @@ export default function ProviderForm({ provider, open, onClose, onSaved }: Provi
           },
         });
         if (isActive) {
-          // set as active after creation — need to find and switch
-          // switch_provider will be called after the provider list refreshes
+          await invoke("switch_provider", { id: created.id });
         }
       }
       onSaved();
