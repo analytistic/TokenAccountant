@@ -1,167 +1,101 @@
 import type { CurrentAudit as CurrentAuditType } from "../types";
 
-interface CurrentAuditProps {
-  audit: CurrentAuditType | null;
-}
+interface CurrentAuditProps { audit: CurrentAuditType | null; }
 
-function formatK(v: number) {
-  return `${(v / 1000).toFixed(1)}K`;
+function formatTokens(value: number) {
+  const abs = Math.abs(value);
+  return abs >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value);
 }
 
 export default function CurrentAudit({ audit }: CurrentAuditProps) {
   if (!audit) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
-        等待新请求...
+      <div className="flex h-full flex-col items-center justify-center text-center">
+        <span className="text-sm font-medium text-gray-400">等待第一笔审计</span>
+        <span className="mt-1 text-[10px] text-gray-400">启动代理并发送请求后，这里会显示最新对账结果</span>
       </div>
     );
   }
 
-  const prefillAudit = audit.input_audit + audit.cache_audit;
-  const prefillClaimed = audit.input_claimed + audit.cache_claimed;
-  const prefillMax = Math.max(prefillAudit, prefillClaimed, 1);
-  const outputMax = Math.max(audit.output_audit, audit.output_claimed, 1);
+  const rows = [
+    { label: "Input", color: "var(--ico-input)", claimed: audit.input_claimed, detected: audit.input_audit },
+    { label: "Cache", color: "var(--ico-cache)", claimed: audit.cache_claimed, detected: audit.cache_audit },
+    { label: "Output", color: "var(--ico-output)", claimed: audit.output_claimed, detected: audit.output_audit },
+  ];
+  const hasOverreport = rows.some((row) => row.claimed > row.detected);
+  const hasAnyDiff = rows.some((row) => row.claimed !== row.detected);
+  const conclusion = hasOverreport
+    ? "计费异常"
+    : hasAnyDiff
+      ? "存在差异"
+      : "审计一致";
+  const fingerprint = {
+    consistent: { label: "响应指纹一致", className: "text-success", dot: "bg-success" },
+    nonstandard: { label: "响应指纹非标准", className: "text-warning", dot: "bg-warning" },
+    suspicious: { label: "响应指纹可疑", className: "text-danger", dot: "bg-danger" },
+    unknown: { label: "响应指纹未识别", className: "text-gray-500", dot: "bg-gray-400" },
+    not_applicable: { label: "响应指纹不适用", className: "text-gray-400", dot: "bg-gray-300" },
+  }[audit.fingerprint_status] ?? { label: "响应指纹未识别", className: "text-gray-500", dot: "bg-gray-400" };
+  const headerFingerprint = {
+    consistent: { label: "HTTP 指纹一致", className: "text-success", dot: "bg-success" },
+    nonstandard: { label: "HTTP 指纹非标准", className: "text-warning", dot: "bg-warning" },
+    suspicious: { label: "HTTP 指纹可疑", className: "text-danger", dot: "bg-danger" },
+    unknown: { label: "HTTP 指纹未识别", className: "text-gray-500", dot: "bg-gray-400" },
+    not_applicable: { label: "HTTP 指纹不适用", className: "text-gray-400", dot: "bg-gray-300" },
+  }[audit.header_fingerprint_status] ?? { label: "HTTP 指纹未识别", className: "text-gray-500", dot: "bg-gray-400" };
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Pass/fail */}
-      <div className="flex items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className={`mb-3 flex shrink-0 items-center gap-2 rounded-md px-3 py-2 ${hasOverreport ? "bg-danger-subtle text-danger" : "bg-success-subtle text-success"}`}>
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/70 text-xs font-bold">{hasOverreport ? "!" : "✓"}</span>
+        <div className="min-w-0">
+          <div className="truncate text-xs font-semibold">{conclusion}</div>
+        </div>
+      </div>
+
+      <div className="mb-2 flex min-w-0 shrink-0 items-center justify-between gap-2 px-1 text-[9px]">
+        <span className={`flex items-center gap-1.5 font-medium ${fingerprint.className}`}>
+          <i className={`h-1.5 w-1.5 rounded-full ${fingerprint.dot}`} />
+          {fingerprint.label}
+        </span>
         <span
-          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0
-            ${audit.audit_passed ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger"}`}
+          className="min-w-0 truncate font-mono text-gray-400"
+          title={[audit.response_id, ...audit.fingerprint_issues].filter(Boolean).join("\n")}
         >
-          {audit.audit_passed ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          )}
-        </span>
-        <span className="text-xs font-semibold text-gray-600">
-          {audit.audit_passed ? "审计通过" : "审计未通过"}
+          {audit.response_id ?? audit.fingerprint_issues[0] ?? "无响应 ID"}
         </span>
       </div>
 
-      {/* ===== Prefill section (Input + Cache) ===== */}
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--ico-input)" }}>
-          Prefill
+      <div className="mb-2 flex min-w-0 shrink-0 items-center justify-between gap-2 px-1 text-[9px]">
+        <span className={`flex items-center gap-1.5 font-medium ${headerFingerprint.className}`}>
+          <i className={`h-1.5 w-1.5 rounded-full ${headerFingerprint.dot}`} />
+          {headerFingerprint.label}
         </span>
+        <span
+          className="min-w-0 truncate font-mono text-gray-400"
+          title={[audit.upstream_request_id, ...audit.header_fingerprint_issues].filter(Boolean).join("\n")}
+        >
+          {audit.upstream_request_id ?? audit.header_fingerprint_issues[0] ?? "无追踪 ID"}
+        </span>
+      </div>
 
-        {/* 声称 row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-400 w-7 text-right shrink-0">声称</span>
-          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
-            <div
-              className="absolute top-0 h-full rounded-sm"
-              style={{ left: 0, width: `${(audit.input_claimed / prefillMax) * 100}%`, backgroundColor: "var(--ico-input)", opacity: 0.45 }}
-            />
-            <div
-              className="absolute top-0 h-full rounded-sm"
-              style={{ right: 0, width: `${(audit.cache_claimed / prefillMax) * 100}%`, backgroundColor: "var(--ico-cache)", opacity: 0.45 }}
-            />
-          </div>
-          <span className="text-[10px] font-semibold text-gray-500 w-11 text-right shrink-0 font-mono tabular-nums">
-            {formatK(prefillClaimed)}
-          </span>
+      <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-gray-100">
+        <div className="grid grid-cols-[1fr_1fr_1fr_1.1fr] bg-gray-50 px-3 py-1.5 text-[9px] font-medium text-gray-400">
+          <span>类型</span><span className="text-right">声称</span><span className="text-right">检测</span><span className="text-right">差异</span>
         </div>
-
-        {/* 审计 row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 w-7 text-right shrink-0">审计</span>
-          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
-            <div
-              className="absolute top-0 h-full rounded-sm"
-              style={{ left: 0, width: `${(audit.input_audit / prefillMax) * 100}%`, backgroundColor: "var(--ico-input)" }}
-            />
-            <div
-              className="absolute top-0 h-full rounded-sm"
-              style={{ right: 0, width: `${(audit.cache_audit / prefillMax) * 100}%`, backgroundColor: "var(--ico-cache)" }}
-            />
-          </div>
-          <span className="text-[10px] font-semibold text-gray-600 w-11 text-right shrink-0 font-mono tabular-nums">
-            {formatK(prefillAudit)}
-          </span>
-        </div>
-
-        {/* Diff row */}
-        <div className="flex items-center gap-4">
-          {(["input", "cache"] as const).map((k) => {
-            const a = audit[`${k}_audit`] as number;
-            const c = audit[`${k}_claimed`] as number;
-            const diff = c - a;
-            const rate = c > 0 ? (diff / c) * 100 : 0;
-            const color = Math.abs(rate) < 3 ? "var(--success)" : Math.abs(rate) < 5 ? "var(--warning)" : "var(--danger)";
-            const dot = k === "input" ? "var(--ico-input)" : "var(--ico-cache)";
-            return (
-              <span key={k} className="flex items-center gap-1 text-[10px]">
-                <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: dot }} />
-                <span className="text-gray-500">{k === "input" ? "Input" : "Cache"}</span>
-                <span className="font-mono font-semibold" style={{ color }}>
-                  {diff >= 0 ? "+" : ""}{formatK(diff)}
-                </span>
+        {rows.map((row) => {
+          const diff = row.claimed - row.detected;
+          return (
+            <div key={row.label} className="grid grid-cols-[1fr_1fr_1fr_1.1fr] items-center border-t border-gray-100 px-3 py-2 text-[10px]">
+              <span className="flex items-center gap-1.5 font-medium text-gray-600"><i className="h-2 w-2 rounded-sm" style={{ backgroundColor: row.color }} />{row.label}</span>
+              <span className="text-right font-mono text-gray-500">{formatTokens(row.claimed)}</span>
+              <span className="text-right font-mono text-gray-700">{formatTokens(row.detected)}</span>
+              <span className={`text-right font-mono font-semibold ${diff > 0 ? "text-danger" : diff === 0 ? "text-success" : "text-gray-500"}`}>
+                {diff > 0 ? "+" : ""}{formatTokens(diff)}
               </span>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ===== Output section ===== */}
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--ico-output)" }}>
-          Output
-        </span>
-
-        {/* 声称 row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-400 w-7 text-right shrink-0">声称</span>
-          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
-            <div
-              className="absolute top-0 h-full rounded-sm"
-              style={{ left: 0, width: `${(audit.output_claimed / outputMax) * 100}%`, backgroundColor: "var(--ico-output)", opacity: 0.45 }}
-            />
-          </div>
-          <span className="text-[10px] font-semibold text-gray-500 w-11 text-right shrink-0 font-mono tabular-nums">
-            {formatK(audit.output_claimed)}
-          </span>
-        </div>
-
-        {/* 审计 row */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold text-gray-500 w-7 text-right shrink-0">审计</span>
-          <div className="flex-1 h-1 bg-gray-100 rounded-sm relative overflow-hidden">
-            <div
-              className="absolute top-0 h-full rounded-sm"
-              style={{ left: 0, width: `${(audit.output_audit / outputMax) * 100}%`, backgroundColor: "var(--ico-output)" }}
-            />
-          </div>
-          <span className="text-[10px] font-semibold text-gray-600 w-11 text-right shrink-0 font-mono tabular-nums">
-            {formatK(audit.output_audit)}
-          </span>
-        </div>
-
-        {/* Diff row */}
-        <div className="flex items-center gap-1 text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: "var(--ico-output)" }} />
-          <span className="text-gray-500">Output</span>
-          <span className="font-mono font-semibold ml-1" style={{ color: (() => {
-            const c = audit.output_claimed;
-            const a = audit.output_audit;
-            const diff = c - a;
-            const rate = c > 0 ? (diff / c) * 100 : 0;
-            return Math.abs(rate) < 3 ? "var(--success)" : Math.abs(rate) < 5 ? "var(--warning)" : "var(--danger)";
-          })() }}>
-            {(() => {
-              const c = audit.output_claimed;
-              const a = audit.output_audit;
-              const diff = c - a;
-              return `${diff >= 0 ? "+" : ""}${formatK(diff)}`;
-            })()}
-          </span>
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

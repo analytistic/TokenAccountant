@@ -126,7 +126,7 @@ impl Database {
 
     pub fn insert_audit_log(&self, log: &crate::auditor::diff_comparator::AuditRecord) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO audit_log (provider_id, model, api_format, claimed_input_tokens, claimed_output_tokens, claimed_cached_tokens, real_input_tokens, real_output_tokens, detected_cached_tokens, input_diff, output_diff, cache_diff, is_suspicious, suspicion_reason, request_preview, response_preview) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO audit_log (provider_id, model, api_format, claimed_input_tokens, claimed_output_tokens, claimed_cached_tokens, real_input_tokens, real_output_tokens, detected_cached_tokens, input_diff, output_diff, cache_diff, is_suspicious, suspicion_reason, request_preview, response_preview, response_headers) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 log.provider_id, log.model, log.api_format,
                 log.claimed_input_tokens, log.claimed_output_tokens, log.claimed_cached_tokens,
@@ -134,6 +134,7 @@ impl Database {
                 log.input_diff, log.output_diff, log.cache_diff,
                 log.is_suspicious as i32, log.suspicion_reason,
                 log.request_preview, log.response_preview,
+                log.response_headers,
             ],
         )?;
         Ok(())
@@ -166,6 +167,7 @@ impl Database {
                 suspicion_reason: row.get(15)?,
                 request_preview: row.get(16)?,
                 response_preview: row.get(17)?,
+                response_headers: row.get(18)?,
             })
         })?;
         let mut logs = Vec::new();
@@ -368,10 +370,27 @@ impl Database {
                 "SELECT is_suspicious,
                     real_input_tokens, claimed_input_tokens, input_diff,
                     detected_cached_tokens, claimed_cached_tokens, cache_diff,
-                    real_output_tokens, claimed_output_tokens, output_diff
+                    real_output_tokens, claimed_output_tokens, output_diff,
+                    api_format, response_preview, response_headers, model
                 FROM audit_log ORDER BY id DESC LIMIT 1"
             )?;
             let mut rows = stmt.query_map([], |row| {
+                let api_format: String = row.get(10)?;
+                let response_preview: String = row.get(11)?;
+                let response_headers: String = row.get(12)?;
+                let model: String = row.get(13)?;
+                let (fingerprint, header_fingerprint) =
+                    if crate::auditor::response_fingerprint::should_check_origin(&model) {
+                        (
+                            crate::auditor::response_fingerprint::analyze(&api_format, &response_preview),
+                            crate::auditor::response_fingerprint::analyze_headers(&api_format, &response_headers),
+                        )
+                    } else {
+                        (
+                            crate::auditor::response_fingerprint::not_applicable_response(),
+                            crate::auditor::response_fingerprint::not_applicable_headers(),
+                        )
+                    };
                 Ok(CurrentAudit {
                     audit_passed: row.get::<_, i32>(0)? == 0,
                     input_audit: row.get(1)?,
@@ -383,6 +402,12 @@ impl Database {
                     output_audit: row.get(7)?,
                     output_claimed: row.get(8)?,
                     output_diff: row.get(9)?,
+                    fingerprint_status: fingerprint.status,
+                    response_id: fingerprint.response_id,
+                    fingerprint_issues: fingerprint.issues,
+                    header_fingerprint_status: header_fingerprint.status,
+                    upstream_request_id: header_fingerprint.request_id,
+                    header_fingerprint_issues: header_fingerprint.issues,
                 })
             })?;
             rows.next().transpose()?

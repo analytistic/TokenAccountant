@@ -63,20 +63,18 @@ export default function ProviderRanking({ providers, onSwitch }: ProviderRanking
             </div>
           </div>
 
-          {/* Right: credibility + I/C/O diff */}
+          {/* Right: credibility + compact discrepancy summary */}
           <div className="provider-rank-metrics flex items-center gap-3 shrink-0">
             <span className={`text-lg font-bold font-mono tabular-nums text-right ${credibilityColor(p.credibility)}`}>
               {Math.round(p.credibility)}%
             </span>
-            <div className="provider-rank-diffs flex flex-col gap-0.5 w-[74px] text-right overflow-hidden">
-              <span className="text-[9px] text-gray-500 font-mono tabular-nums whitespace-nowrap">
-                I {p.input_diff_rate >= 0 ? "+" : ""}{p.input_diff_rate.toFixed(1)}%
-              </span>
-              <span className="text-[9px] text-gray-500 font-mono tabular-nums whitespace-nowrap">
-                C {p.cache_diff_rate >= 0 ? "+" : ""}{p.cache_diff_rate.toFixed(1)}%
-              </span>
-              <span className="text-[9px] text-gray-500 font-mono tabular-nums whitespace-nowrap">
-                O {p.output_diff_rate >= 0 ? "+" : ""}{p.output_diff_rate.toFixed(1)}%
+            <div className="provider-rank-diffs flex w-[74px] flex-col overflow-hidden text-right">
+              <span className="text-[9px] text-gray-400">最大多报</span>
+              <span className="whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums text-gray-600">
+                {(() => {
+                  const overreport = Math.max(0, p.input_diff_rate, p.cache_diff_rate, p.output_diff_rate);
+                  return `+${overreport.toFixed(1)}%`;
+                })()}
               </span>
             </div>
           </div>

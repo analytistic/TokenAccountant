@@ -74,6 +74,12 @@ export interface CurrentAudit {
   output_audit: number;
   output_claimed: number;
   output_diff: number;
+  fingerprint_status: "consistent" | "nonstandard" | "suspicious" | "unknown" | "not_applicable";
+  response_id: string | null;
+  fingerprint_issues: string[];
+  header_fingerprint_status: "consistent" | "nonstandard" | "suspicious" | "unknown" | "not_applicable";
+  upstream_request_id: string | null;
+  header_fingerprint_issues: string[];
 }
 
 // ---- Provider (matches Rust AuditSummary + ProviderWithStats) ----

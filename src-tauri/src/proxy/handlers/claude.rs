@@ -86,6 +86,7 @@ async fn forward_with_audit(
     // --- 5. Handle response ---
     match upstream_req {
         Ok(resp) => {
+            let captured_response_headers = crate::auditor::response_fingerprint::capture_headers(resp.headers());
             let is_streaming = resp.headers()
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())
@@ -106,6 +107,7 @@ async fn forward_with_audit(
                 let audit_body_str = body_str.clone();
                 let audit_tokenizer = tokenizer.clone();
                 let audit_params = template_params.clone();
+                let audit_response_headers = captured_response_headers.clone();
                 tokio::spawn(async move {
                     // Wait for the streamed response to be fully consumed
                     while !forwarder.stream_ended.load(std::sync::atomic::Ordering::SeqCst) {
@@ -151,7 +153,7 @@ async fn forward_with_audit(
 
                     let record = audit_state.diff_comparator.compare(
                         &audit_provider_id, &model_name, audit_fmt.as_str(),
-                        &audit_body_str, &full_text,
+                        &audit_body_str, &full_text, &audit_response_headers,
                         claimed_input, claimed_output, claimed_cached,
                         real_input, real_output, real_cached,
                     );

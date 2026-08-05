@@ -82,6 +82,12 @@ pub struct CurrentAudit {
     pub output_audit: i64,
     pub output_claimed: i64,
     pub output_diff: i64,
+    pub fingerprint_status: String,
+    pub response_id: Option<String>,
+    pub fingerprint_issues: Vec<String>,
+    pub header_fingerprint_status: String,
+    pub upstream_request_id: Option<String>,
+    pub header_fingerprint_issues: Vec<String>,
 }
 
 /// I/C/O claimed vs detected summary for a single provider+model combination

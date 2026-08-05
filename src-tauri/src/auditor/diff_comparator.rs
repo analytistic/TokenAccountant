@@ -20,6 +20,7 @@ pub struct AuditRecord {
     pub suspicion_reason: String,
     pub request_preview: String,
     pub response_preview: String,
+    pub response_headers: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +47,7 @@ impl DiffComparator {
         api_format: &str,
         request_preview: &str,
         response_preview: &str,
+        response_headers: &str,
         claimed_input: i32,
         claimed_output: i32,
         claimed_cached: i32,
@@ -93,6 +95,7 @@ impl DiffComparator {
             suspicion_reason,
             request_preview: truncate(request_preview, 500),
             response_preview: truncate(response_preview, 2000),
+            response_headers: response_headers.to_string(),
         }
     }
 }

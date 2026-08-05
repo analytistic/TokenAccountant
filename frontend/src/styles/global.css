@@ -90,6 +90,43 @@ body {
   container-name: provider-ranking;
 }
 
+.reconciliation-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr);
+  grid-template-rows: 88px minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-areas:
+    "overview overview"
+    "trend audit"
+    "history providers";
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.reconciliation-strip { grid-area: overview; }
+.reconciliation-trend { grid-area: trend; }
+.reconciliation-audit { grid-area: audit; }
+.reconciliation-history { grid-area: history; }
+.reconciliation-providers { grid-area: providers; }
+
+@media (max-height: 700px) {
+  .reconciliation-grid {
+    grid-template-rows: 78px minmax(0, 3fr) minmax(0, 1.8fr);
+    gap: 10px;
+  }
+  .reconciliation-strip > div > div { padding-top: 7px; padding-bottom: 7px; }
+  .reconciliation-audit .card-body { padding-top: 7px; padding-bottom: 7px; }
+}
+
+@media (max-width: 760px) {
+  .reconciliation-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.85fr);
+    gap: 9px;
+  }
+  .reconciliation-strip > div > div { padding-left: 10px; padding-right: 10px; }
+  .reconciliation-strip .text-xl { font-size: 15px; }
+}
+
 @container provider-ranking (max-width: 390px) {
   .provider-rank-diffs { display: none; }
   .provider-rank-row { padding-left: 8px; padding-right: 8px; }

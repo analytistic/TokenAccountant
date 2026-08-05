@@ -43,6 +43,7 @@ pub const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_audit_provider ON audit_log(provider_id)",
     "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_audit_suspicious ON audit_log(is_suspicious)",
+    "ALTER TABLE audit_log ADD COLUMN response_headers TEXT NOT NULL DEFAULT '{}'",
 ];
 
 pub fn get_schema_version() -> i32 {

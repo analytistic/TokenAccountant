@@ -1,180 +1,81 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { TrendPoint } from "../types";
 
-interface TrendChartProps {
-  data: TrendPoint[];
-}
+interface TrendChartProps { data: TrendPoint[]; }
+type Metric = "total" | "input" | "cache" | "output";
 
-// ---- Single SubChart ----
-interface SubChartProps {
-  label: string;
-  color: string;
-  auditValues: number[];
-  claimedValues: number[];
-}
+const METRICS: Array<{ key: Metric; label: string; color: string }> = [
+  { key: "total", label: "总计", color: "var(--brand)" },
+  { key: "input", label: "Input", color: "var(--ico-input)" },
+  { key: "cache", label: "Cache", color: "var(--ico-cache)" },
+  { key: "output", label: "Output", color: "var(--ico-output)" },
+];
 
-function SubChart({ label, color, auditValues, claimedValues }: SubChartProps) {
-  const padding = { left: 4, right: 52, top: 10, bottom: 6 };
-  const width = 740;
-  const height = 85;
-  const chartW = width - padding.left - padding.right;
-  const chartH = height - padding.top - padding.bottom;
-
-  // Compute diff rate for latest point
-  const lastClaimed = claimedValues[claimedValues.length - 1] || 0;
-  const lastAudit = auditValues[auditValues.length - 1] || 0;
-  const diffRate = lastClaimed > 0 ? ((lastClaimed - lastAudit) / lastClaimed) * 100 : 0;
-  const diffColor =
-    Math.abs(diffRate) < 3 ? "var(--success)" : Math.abs(diffRate) < 5 ? "var(--warning)" : "var(--danger)";
-
-  // Scale Y — dynamic range, bottom slightly below min data (>= 0)
-  const allValues = [...auditValues, ...claimedValues];
-  const dataMin = Math.min(...allValues, 0);
-  const dataMax = Math.max(...allValues, 1);
-  const rawRange = dataMax - dataMin;
-  const yMin = Math.max(0, dataMin - rawRange * 0.1);
-  const yMax = dataMax + rawRange * 0.15;
-  const yRange = yMax - yMin || 1;
-
-  const toX = (i: number) => padding.left + (i / (auditValues.length - 1)) * chartW;
-  const toY = (v: number) => padding.top + chartH - ((v - yMin) / yRange) * chartH;
-  const baselineY = padding.top + chartH; // bottom of chart
-
-  // Build point arrays
-  const auditPts = auditValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
-  const claimedPts = claimedValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
-
-  // Polyline paths (straight line segments, no smoothing interpolation)
-  const auditPolyline = auditPts.map((p, i) =>
-    `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`
-  ).join(" ");
-
-  const claimedPolyline = claimedPts.map((p, i) =>
-    `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`
-  ).join(" ");
-
-  // Fill area between claimed (top edge) and audit (bottom edge)
-  // Polygon: forward along claimed, then backward along audit → close
-  const fillPath = (() => {
-    const N = auditPts.length;
-    let d = "";
-    // Forward along claimed line (top edge of fill)
-    for (let i = 0; i < N; i++) {
-      d += `${i === 0 ? "M" : "L"}${claimedPts[i].x.toFixed(1)},${claimedPts[i].y.toFixed(1)} `;
-    }
-    // Down to audit at last point
-    d += `L${auditPts[N - 1].x.toFixed(1)},${auditPts[N - 1].y.toFixed(1)} `;
-    // Backward along audit line (bottom edge of fill)
-    for (let i = N - 2; i >= 0; i--) {
-      d += `L${auditPts[i].x.toFixed(1)},${auditPts[i].y.toFixed(1)} `;
-    }
-    d += "Z";
-    return d;
-  })();
-
-  // Y-axis tick values (bottom, middle, top)
-  const ticks = [
-    { label: yMin, y: toY(yMin) },
-    { label: (yMin + yMax) / 2, y: toY((yMin + yMax) / 2) },
-    { label: yMax, y: toY(yMax) },
-  ];
-
-  const allZero = auditValues.every(v => v === 0) && claimedValues.every(v => v === 0);
-
-  return (
-    <div className="sub-chart flex-1 flex flex-col min-h-0">
-      {/* Header */}
-      <div className="flex items-center justify-between h-[14px] shrink-0 px-0.5">
-        <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color }}>
-          <span className="inline-block w-[5px] h-[5px] rounded-[1.5px] shrink-0" style={{ backgroundColor: color }} />
-          {label}
-        </span>
-      </div>
-
-      {/* Chart */}
-      <svg className="w-full flex-1 min-h-0" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        {/* Grid lines */}
-        {ticks.map((t, i) => (
-          <g key={i}>
-            <line x1={padding.left} y1={t.y} x2={width - padding.right + 4} y2={t.y}
-              stroke="var(--gray-200)" strokeWidth="0.5" />
-            <text x={width - padding.right + 8} y={t.y + 3}
-              fill="var(--gray-400)" fontSize="9" textAnchor="start">
-              {(t.label / 1000).toFixed(1).replace(/\.0$/, "") + "K"}
-            </text>
-          </g>
-        ))}
-
-        {/* Fill area between claimed and audit */}
-        <path d={fillPath} fill={color} fillOpacity="0.12" />
-
-        {/* Claimed line (dashed, thinner) */}
-        <path d={claimedPolyline} fill="none" stroke={color} strokeWidth="1.5"
-          strokeOpacity="0.4" strokeLinejoin="round" strokeLinecap="round"
-          strokeDasharray="5 3" />
-
-        {/* Audit line (solid, thicker) */}
-        <path d={auditPolyline} fill="none" stroke={color} strokeWidth="2.2"
-          strokeLinejoin="round" strokeLinecap="round" />
-      </svg>
-
-      {/* Diff rate badge */}
-      <div className="shrink-0 h-5 flex items-center justify-end px-1">
-        {allZero ? (
-          <span className="text-[11px] text-gray-400">暂无趋势数据</span>
-        ) : (
-          <span className="text-sm font-bold font-mono" style={{ color: diffColor }}>
-            {diffRate >= 0 ? "+" : ""}{diffRate.toFixed(1)}%
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---- Main TrendChart ----
 export default function TrendChart({ data }: TrendChartProps) {
-  const ico = useMemo(() => {
-    const input_audit: number[] = [];
-    const input_claimed: number[] = [];
-    const cache_audit: number[] = [];
-    const cache_claimed: number[] = [];
-    const output_audit: number[] = [];
-    const output_claimed: number[] = [];
+  const [metric, setMetric] = useState<Metric>("total");
+  const active = METRICS.find((item) => item.key === metric)!;
+  const values = useMemo(() => data.map((point) => {
+    if (metric === "total") {
+      return {
+        claimed: point.input_claimed + point.cache_claimed + point.output_claimed,
+        detected: point.input_detected + point.cache_detected + point.output_detected,
+      };
+    }
+    return {
+      claimed: point[`${metric}_claimed`],
+      detected: point[`${metric}_detected`],
+    };
+  }), [data, metric]);
 
-    data.forEach((p) => {
-      input_audit.push(p.input_detected);
-      input_claimed.push(p.input_claimed);
-      cache_audit.push(p.cache_detected);
-      cache_claimed.push(p.cache_claimed);
-      output_audit.push(p.output_detected);
-      output_claimed.push(p.output_claimed);
-    });
-
-    return [
-      { label: "Input", color: "var(--ico-input)", audit: input_audit, claimed: input_claimed },
-      { label: "Cache", color: "var(--ico-cache)", audit: cache_audit, claimed: cache_claimed },
-      { label: "Output", color: "var(--ico-output)", audit: output_audit, claimed: output_claimed },
-    ];
-  }, [data]);
+  const width = 760;
+  const height = 220;
+  const pad = { left: 10, right: 54, top: 18, bottom: 20 };
+  const max = Math.max(1, ...values.flatMap((value) => [value.claimed, value.detected]));
+  const toX = (index: number) => pad.left + (index / Math.max(1, values.length - 1)) * (width - pad.left - pad.right);
+  const toY = (value: number) => pad.top + (height - pad.top - pad.bottom) * (1 - value / (max * 1.12));
+  const path = (key: "claimed" | "detected") => values.map((value, index) =>
+    `${index === 0 ? "M" : "L"}${toX(index).toFixed(1)},${toY(value[key]).toFixed(1)}`,
+  ).join(" ");
+  const area = values.length ? `${path("claimed")} ${[...values].reverse().map((value, reverseIndex) => {
+    const index = values.length - 1 - reverseIndex;
+    return `L${toX(index).toFixed(1)},${toY(value.detected).toFixed(1)}`;
+  }).join(" ")} Z` : "";
+  const latest = values[values.length - 1] ?? { claimed: 0, detected: 0 };
+  const diff = latest.claimed - latest.detected;
+  const rate = latest.claimed > 0 ? (diff / latest.claimed) * 100 : 0;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-0.5">
-      {ico.map((s) => (
-        <SubChart key={s.label} label={s.label} color={s.color}
-          auditValues={s.audit} claimedValues={s.claimed} />
-      ))}
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-6 shrink-0 pb-1">
-        <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
-          <span className="inline-block w-3 h-[2px] rounded bg-current" /> 审计值（基准）
-        </span>
-        <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
-          <span className="inline-block w-3 h-[1px] rounded border border-dashed border-current" /> 声称值
-        </span>
-        <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
-          <span className="inline-block w-3 h-2 rounded-sm bg-black/10" /> 差值区域
-        </span>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
+        <div className="flex rounded-md bg-gray-100 p-0.5">
+          {METRICS.map((item) => (
+            <button key={item.key} type="button" onClick={() => setMetric(item.key)}
+              className={`rounded px-2.5 py-1 text-[10px] font-semibold transition-colors ${metric === item.key ? "bg-white text-gray-800 shadow-xs" : "text-gray-400 hover:text-gray-600"}`}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-baseline gap-1.5 text-right">
+          <span className="text-[10px] text-gray-400">最新差异</span>
+          <span className={`font-mono text-sm font-bold ${Math.abs(rate) < 3 ? "text-success" : "text-danger"}`}>
+            {diff > 0 ? "+" : ""}{diff} <span className="text-[10px] font-normal">({rate > 0 ? "+" : ""}{rate.toFixed(1)}%)</span>
+          </span>
+        </div>
+      </div>
+      <svg className="min-h-0 flex-1" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+        {[0, 0.5, 1].map((ratio) => {
+          const value = max * ratio;
+          const y = toY(value);
+          return <g key={ratio}><line x1={pad.left} y1={y} x2={width - pad.right} y2={y} stroke="var(--gray-200)" strokeWidth="0.7" /><text x={width - pad.right + 8} y={y + 3} fill="var(--gray-400)" fontSize="9">{value >= 1000 ? `${(value / 1000).toFixed(1)}K` : Math.round(value)}</text></g>;
+        })}
+        <path d={area} fill={active.color} fillOpacity="0.1" />
+        <path d={path("claimed")} fill="none" stroke={active.color} strokeOpacity="0.38" strokeWidth="1.5" strokeDasharray="5 4" />
+        <path d={path("detected")} fill="none" stroke={active.color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="flex shrink-0 items-center justify-center gap-5 pt-2 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded bg-gray-500" />本地检测</span>
+        <span className="flex items-center gap-1.5"><i className="h-px w-4 border-t border-dashed border-gray-400" />Provider 声称</span>
+        <span className="flex items-center gap-1.5"><i className="h-2 w-4 rounded-sm bg-brand-muted" />差异区间</span>
       </div>
     </div>
   );
