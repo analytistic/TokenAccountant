@@ -53,16 +53,24 @@ pub trait Tokenizer: Send + Sync {
 ///
 /// This is a standalone helper, not part of message_converter — message
 /// conversion is only about messages, not renderer parameters.
-pub fn extract_template_params(body_str: &str) -> TemplateParams {
+pub fn extract_template_params(body_str: &str, model: &str) -> TemplateParams {
     let Ok(body_val) = serde_json::from_str::<serde_json::Value>(body_str) else {
         return TemplateParams::default();
     };
 
     // thinking_mode: if "thinking" field exists with type "enabled"
-    let thinking_mode = body_val.get("thinking")
+    let explicit_mode = body_val.get("thinking")
         .and_then(|t| t.get("type").and_then(|v| v.as_str()))
-        .filter(|&t| t == "enabled")
-        .map(|_| "thinking".to_string());
+        .and_then(|kind| match kind {
+            "enabled" => Some("thinking".to_string()),
+            "disabled" => Some("chat".to_string()),
+            _ => None,
+        });
+    let thinking_mode = explicit_mode.or_else(|| {
+        if model == "deepseek-chat" { Some("chat".to_string()) }
+        else if model == "deepseek-reasoner" { Some("thinking".to_string()) }
+        else { None }
+    });
 
     // reasoning_effort: from output_config.effort
     let reasoning_effort = body_val.get("output_config")
@@ -97,7 +105,8 @@ impl TokenizerFactory {
     }
 
     pub fn for_model(&self, model: &str) -> Option<Arc<dyn Tokenizer>> {
-        if model.starts_with("deepseek-") {
+        let normalized = model.to_ascii_lowercase();
+        if normalized.starts_with("deepseek-") || normalized.contains("/deepseek-") {
             self.tokenizers.get("deepseek").cloned()
         } else if model.starts_with("gpt-") || model.starts_with("text-")
             || model.starts_with("qwen-") {
@@ -105,5 +114,35 @@ impl TokenizerFactory {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_template_params;
+
+    #[test]
+    fn honors_explicit_thinking_mode() {
+        assert_eq!(
+            extract_template_params(r#"{"thinking":{"type":"disabled"}}"#, "deepseek-v4-pro").thinking_mode.as_deref(),
+            Some("chat")
+        );
+        assert_eq!(
+            extract_template_params(r#"{"thinking":{"type":"enabled"}}"#, "deepseek-v4-pro").thinking_mode.as_deref(),
+            Some("thinking")
+        );
+    }
+
+    #[test]
+    fn maps_compatibility_model_modes() {
+        assert_eq!(extract_template_params("{}", "deepseek-chat").thinking_mode.as_deref(), Some("chat"));
+        assert_eq!(extract_template_params("{}", "deepseek-reasoner").thinking_mode.as_deref(), Some("thinking"));
+    }
+
+    #[test]
+    fn recognizes_official_vllm_model_id() {
+        assert!(super::TokenizerFactory::new()
+            .for_model("deepseek-ai/DeepSeek-V4-Pro")
+            .is_some());
     }
 }

@@ -6,8 +6,8 @@
 use crate::auditor::tokenizer::Tokenizer;
 use crate::auditor::message_converter::{Conversation, NormalizedMessage};
 use crate::auditor::tokenizer::TemplateParams;
-use super::gpt::GptTokenizer;
 use serde_json::Value;
+use tokenizers::Tokenizer as HuggingFaceTokenizer;
 
 // ============================================================
 // Special Tokens
@@ -80,6 +80,7 @@ struct V4Message {
     content: Option<String>,
     content_blocks: Option<Vec<V4ContentBlock>>,
     tool_calls: Option<Vec<V4ToolCall>>,
+    tool_call_id: Option<String>,
     reasoning: Option<String>,
     tools: Option<Vec<String>>,          // JSON-serialized tool definitions
     response_format: Option<String>,     // JSON schema
@@ -88,6 +89,7 @@ struct V4Message {
 
 #[derive(Clone)]
 struct V4ToolCall {
+    id: Option<String>,
     name: String,
     arguments: String,  // JSON string
 }
@@ -97,28 +99,36 @@ struct V4ToolCall {
 // ============================================================
 
 pub struct DeepSeekTokenizer {
-    gpt: GptTokenizer,
+    tokenizer: HuggingFaceTokenizer,
 }
 
 impl DeepSeekTokenizer {
     pub fn new() -> Self {
-        DeepSeekTokenizer {
-            gpt: GptTokenizer::new(),
-        }
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/tokenizers/deepseek-v4/tokenizer.json"
+        ));
+        let tokenizer = HuggingFaceTokenizer::from_bytes(bytes)
+            .expect("Failed to load bundled DeepSeek V4 tokenizer");
+        DeepSeekTokenizer { tokenizer }
     }
 }
 
 impl Tokenizer for DeepSeekTokenizer {
     fn encode(&self, text: &str) -> Vec<u32> {
-        self.gpt.encode(text)
+        self.tokenizer
+            .encode(text, false)
+            .expect("DeepSeek V4 tokenizer failed to encode text")
+            .get_ids()
+            .to_vec()
     }
 
     fn decode(&self, ids: &[u32]) -> String {
-        self.gpt.decode(ids)
+        self.tokenizer.decode(ids, false).unwrap_or_default()
     }
 
     fn count_tokens(&self, text: &str) -> u32 {
-        self.gpt.count_tokens(text)
+        self.encode(text).len() as u32
     }
 
     fn render_output(&self, msg: &NormalizedMessage) -> String {
@@ -136,6 +146,7 @@ impl Tokenizer for DeepSeekTokenizer {
         if let Some(ref tcs) = msg.tool_calls {
             let tc_dsml: Vec<String> = tcs.iter().map(|tc| {
                 let v4_tc = V4ToolCall {
+                    id: tc.id.clone(),
                     name: tc.name.clone(),
                     arguments: tc.arguments.clone(),
                 };
@@ -182,19 +193,25 @@ impl Tokenizer for DeepSeekTokenizer {
                 let schema_val = serde_json::from_str::<Value>(&t.input_schema)
                     .unwrap_or(Value::String(t.input_schema.clone()));
                 map.insert("parameters".into(), schema_val);
-                Value::Object(map).to_string()
+                to_official_json(&Value::Object(map))
             }).collect())
         } else {
             None
         };
 
-        // Attach tools to first system/developer message
-        if let Some(ref schemas) = tool_schemas {
-            if let Some(first) = v4_msgs.first_mut() {
-                if first.role == "system" || first.role == "developer" {
-                    first.tools = Some(schemas.clone());
-                }
-            }
+        // DeepSeek renders tools/response_format on system or developer messages.
+        // Add a synthetic empty system message when the API request starts with a user.
+        if tool_schemas.is_some() || conv.response_format.is_some() {
+            let target = v4_msgs.iter().position(|m| m.role == "system" || m.role == "developer");
+            let index = target.unwrap_or_else(|| {
+                v4_msgs.insert(0, V4Message {
+                    role: "system".into(), content: Some(String::new()), content_blocks: None,
+                    tool_calls: None, tool_call_id: None, reasoning: None, tools: None, response_format: None, wo_eos: false,
+                });
+                0
+            });
+            v4_msgs[index].tools = tool_schemas;
+            v4_msgs[index].response_format = conv.response_format.clone();
         }
 
         // Resolve params with DeepSeek defaults
@@ -232,14 +249,75 @@ fn normalized_to_v4(msg: &NormalizedMessage) -> V4Message {
         content_blocks: None,  // populated by merge_tool_messages
         tool_calls: msg.tool_calls.as_ref().map(|tcs| {
             tcs.iter().map(|tc| V4ToolCall {
+                id: tc.id.clone(),
                 name: tc.name.clone(),
                 arguments: tc.arguments.clone(),
             }).collect()
         }),
+        tool_call_id: msg.tool_call_id.clone(),
         reasoning: msg.reasoning.clone(),
         tools: None,
         response_format: None,
         wo_eos: false,
+    }
+}
+
+#[cfg(test)]
+mod tokenizer_tests {
+    use super::*;
+
+    #[test]
+    fn loads_official_v4_special_tokens() {
+        let tokenizer = DeepSeekTokenizer::new();
+        assert_eq!(tokenizer.encode(BOS_TOKEN), vec![0]);
+        assert_eq!(tokenizer.encode(EOS_TOKEN), vec![1]);
+    }
+
+    #[test]
+    fn round_trips_multilingual_text() {
+        let tokenizer = DeepSeekTokenizer::new();
+        let text = "DeepSeek tokenizer 正确工作。";
+        let ids = tokenizer.encode(text);
+        assert!(!ids.is_empty());
+        assert_eq!(tokenizer.decode(&ids), text);
+    }
+
+    #[test]
+    fn does_not_fall_back_to_cl100k() {
+        use crate::auditor::tokenizers::gpt::GptTokenizer;
+
+        let deepseek = DeepSeekTokenizer::new();
+        let gpt = GptTokenizer::new();
+        let text = "DeepSeek-V4 使用自己的 tokenizer。";
+        assert_ne!(deepseek.encode(text), gpt.encode(text));
+    }
+
+    #[test]
+    fn matches_official_thinking_template_without_tools() {
+        let body = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/tokenizers/deepseek-v4/test_input_2.json"
+        ));
+        let expected = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/tokenizers/deepseek-v4/test_output_2.txt"
+        ));
+        let conversation = crate::auditor::message_converter::from_openai_body(body);
+        assert_eq!(DeepSeekTokenizer::new().apply_chat_template(&conversation), expected);
+    }
+
+    #[test]
+    fn matches_official_thinking_template_with_tools() {
+        let body = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/tokenizers/deepseek-v4/test_input_1.json"
+        ));
+        let expected = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/tokenizers/deepseek-v4/test_output_1.txt"
+        ));
+        let conversation = crate::auditor::message_converter::from_openai_body(body);
+        assert_eq!(DeepSeekTokenizer::new().apply_chat_template(&conversation), expected);
     }
 }
 
@@ -249,7 +327,7 @@ fn normalized_to_v4(msg: &NormalizedMessage) -> V4Message {
 
 fn encode_arguments_to_dsml(tool_call: &V4ToolCall) -> String {
     let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-        .unwrap_or(Value::Object(serde_json::Map::new()));
+        .unwrap_or_else(|_| serde_json::json!({"arguments": tool_call.arguments}));
 
     let obj = match arguments {
         Value::Object(ref m) => m,
@@ -262,7 +340,7 @@ fn encode_arguments_to_dsml(tool_call: &V4ToolCall) -> String {
         let val_str = if is_str {
             val.as_str().unwrap_or("").to_string()
         } else {
-            serde_json::to_string(val).unwrap_or_default()
+            to_official_json(val)
         };
         parts.push(format!(
             "<{dsml}parameter name=\"{key}\" string=\"{is_str}\">{val}</{dsml}parameter>",
@@ -273,6 +351,29 @@ fn encode_arguments_to_dsml(tool_call: &V4ToolCall) -> String {
         ));
     }
     parts.join("\n")
+}
+
+/// Match Python's `json.dumps(..., ensure_ascii=False)` used by the official
+/// DeepSeek encoder, including insertion order and separators.
+fn to_official_json(value: &Value) -> String {
+    match value {
+        Value::Null => "null".into(),
+        Value::Bool(v) => v.to_string(),
+        Value::Number(v) => v.to_string(),
+        Value::String(v) => serde_json::to_string(v).unwrap_or_else(|_| "\"\"".into()),
+        Value::Array(values) => format!(
+            "[{}]",
+            values.iter().map(to_official_json).collect::<Vec<_>>().join(", ")
+        ),
+        Value::Object(values) => format!(
+            "{{{}}}",
+            values.iter().map(|(key, value)| format!(
+                "{}: {}",
+                serde_json::to_string(key).unwrap_or_else(|_| "\"\"".into()),
+                to_official_json(value)
+            )).collect::<Vec<_>>().join(", ")
+        ),
+    }
 }
 
 fn encode_arguments_to_dsml_from_msg(tool_call: &V4ToolCall) -> String {
@@ -289,6 +390,7 @@ fn render_tools(tools: &[String]) -> String {
         text.push_str(t);
         text.push('\n');
     }
+    text.push('\n');
     text.push_str(
         "You MUST strictly follow the above defined tool name and parameter schemas to invoke tool calls.\n"
     );
@@ -308,7 +410,7 @@ fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
         if role == "tool" {
             let tool_content = msg.content.clone().unwrap_or_default();
             let tool_block = V4ContentBlock::ToolResult {
-                tool_use_id: String::new(), // tool_call_id not preserved in our V4Message; OK for template
+                tool_use_id: msg.tool_call_id.clone().unwrap_or_default(),
                 content: tool_content,
             };
             if let Some(last) = merged.last_mut() {
@@ -320,6 +422,7 @@ fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
                         content: None,
                         content_blocks: Some(vec![tool_block]),
                         tool_calls: None,
+                        tool_call_id: None,
                         reasoning: None,
                         tools: None,
                         response_format: None,
@@ -332,6 +435,7 @@ fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
                     content: None,
                     content_blocks: Some(vec![tool_block]),
                     tool_calls: None,
+                    tool_call_id: None,
                     reasoning: None,
                     tools: None,
                     response_format: None,
@@ -349,6 +453,7 @@ fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
                         content: msg.content.clone(),
                         content_blocks: Some(vec![text_block]),
                         tool_calls: None,
+                        tool_call_id: None,
                         reasoning: None,
                         tools: None,
                         response_format: None,
@@ -366,6 +471,7 @@ fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
                     content: msg.content.clone(),
                     content_blocks: Some(vec![text_block]),
                     tool_calls: None,
+                    tool_call_id: None,
                     reasoning: None,
                     tools: None,
                     response_format: None,
@@ -385,14 +491,12 @@ fn merge_tool_messages(messages: Vec<V4Message>) -> Vec<V4Message> {
 // ============================================================
 
 fn sort_tool_results_by_call_order(messages: Vec<V4Message>) -> Vec<V4Message> {
-    // Collect tool_call order from preceding assistant messages
-    // Key: tool_call name → order index
     let mut last_tool_call_order: Vec<String> = Vec::new();
 
     messages.into_iter().map(|mut msg| {
         if msg.role == "assistant" {
             if let Some(ref tcs) = msg.tool_calls {
-                last_tool_call_order = tcs.iter().map(|tc| tc.name.clone()).collect();
+                last_tool_call_order = tcs.iter().filter_map(|tc| tc.id.clone()).collect();
             }
         } else if msg.role == "user" {
             if let Some(ref blocks) = msg.content_blocks {
@@ -408,17 +512,17 @@ fn sort_tool_results_by_call_order(messages: Vec<V4Message>) -> Vec<V4Message> {
 
                     // Sort by position in last_tool_call_order (stable for unknown names)
                     indexed.sort_by(|a, b| {
-                        let name_a = match a.1 {
-                            V4ContentBlock::ToolResult { ref content, .. } => content.clone(),
+                        let id_a = match a.1 {
+                            V4ContentBlock::ToolResult { ref tool_use_id, .. } => tool_use_id.clone(),
                             _ => String::new(),
                         };
-                        let name_b = match b.1 {
-                            V4ContentBlock::ToolResult { ref content, .. } => content.clone(),
+                        let id_b = match b.1 {
+                            V4ContentBlock::ToolResult { ref tool_use_id, .. } => tool_use_id.clone(),
                             _ => String::new(),
                         };
-                        let pos_a = last_tool_call_order.iter().position(|n| name_a.contains(n))
+                        let pos_a = last_tool_call_order.iter().position(|id| id == &id_a)
                             .unwrap_or(usize::MAX);
-                        let pos_b = last_tool_call_order.iter().position(|n| name_b.contains(n))
+                        let pos_b = last_tool_call_order.iter().position(|id| id == &id_b)
                             .unwrap_or(usize::MAX);
                         pos_a.cmp(&pos_b)
                     });
@@ -477,7 +581,9 @@ fn render_message(
             }
             if let Some(ref rf) = msg.response_format {
                 prompt.push_str("\n\n");
-                prompt.push_str(&RESPONSE_FORMAT_TEMPLATE.replace("{schema}", rf));
+                let schema = serde_json::from_str::<Value>(rf)
+                    .map(|v| to_official_json(&v)).unwrap_or_else(|_| rf.clone());
+                prompt.push_str(&RESPONSE_FORMAT_TEMPLATE.replace("{schema}", &schema));
             }
         }
         "developer" => {
@@ -490,7 +596,9 @@ fn render_message(
             }
             if let Some(ref rf) = msg.response_format {
                 content_dev.push_str("\n\n");
-                content_dev.push_str(&RESPONSE_FORMAT_TEMPLATE.replace("{schema}", rf));
+                let schema = serde_json::from_str::<Value>(rf)
+                    .map(|v| to_official_json(&v)).unwrap_or_else(|_| rf.clone());
+                content_dev.push_str(&RESPONSE_FORMAT_TEMPLATE.replace("{schema}", &schema));
             }
             prompt.push_str(&USER_MSG_TEMPLATE.replace("{content}", &content_dev));
         }

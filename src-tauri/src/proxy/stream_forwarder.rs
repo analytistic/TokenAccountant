@@ -10,9 +10,33 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use crate::auditor::message_converter::{NormalizedMessage, ToolCall};
 
+#[derive(Default)]
+struct SseLineBuffer {
+    bytes: Vec<u8>,
+}
+
+impl SseLineBuffer {
+    fn push(&mut self, chunk: &[u8]) -> Vec<String> {
+        self.bytes.extend_from_slice(chunk);
+        let mut lines = Vec::new();
+        while let Some(newline) = self.bytes.iter().position(|byte| *byte == b'\n') {
+            let raw: Vec<u8> = self.bytes.drain(..=newline).collect();
+            lines.push(String::from_utf8_lossy(&raw)
+                .trim_end_matches(['\r', '\n']).to_string());
+        }
+        lines
+    }
+
+    fn finish(&mut self) -> Option<String> {
+        if self.bytes.is_empty() { None }
+        else { Some(String::from_utf8_lossy(&std::mem::take(&mut self.bytes)).to_string()) }
+    }
+}
+
 /// Accumulator for streaming tool call arguments (partial JSON fragments).
 #[derive(Debug, Clone)]
 struct ToolCallAccum {
+    id: Option<String>,
     name: String,
     fragments: Vec<String>,
 }
@@ -20,6 +44,7 @@ struct ToolCallAccum {
 impl ToolCallAccum {
     fn to_tool_call(&self) -> ToolCall {
         ToolCall {
+            id: self.id.clone(),
             name: self.name.clone(),
             arguments: self.fragments.concat(),
         }
@@ -79,6 +104,7 @@ impl StreamForwarder {
 
         tokio::spawn(async move {
             let mut stream = upstream_resp.bytes_stream();
+            let mut line_buffer = SseLineBuffer::default();
             while let Some(item) = stream.next().await {
                 match item {
                     Ok(chunk) => {
@@ -90,8 +116,10 @@ impl StreamForwarder {
                         };
                         raw.lock().await.push_str(&chunk_str);
 
-                        // 2. Parse SSE event and route to structured accumulators
-                        Self::parse_and_route(&chunk_str, &thinking, &text, &tool_calls).await;
+                        // 2. Buffer partial network chunks until complete SSE lines exist.
+                        for line in line_buffer.push(&chunk) {
+                            Self::parse_and_route_line(&line, &thinking, &text, &tool_calls).await;
+                        }
 
                         // 3. Forward chunk to client
                         if let Some(ref cb) = on_chunk {
@@ -107,6 +135,9 @@ impl StreamForwarder {
                     }
                 }
             }
+            if let Some(line) = line_buffer.finish() {
+                Self::parse_and_route_line(&line, &thinking, &text, &tool_calls).await;
+            }
             ended.store(true, Ordering::SeqCst);
         });
 
@@ -114,20 +145,18 @@ impl StreamForwarder {
         rb.body(body).expect("valid response builder after setting status and headers")
     }
 
-    /// Parse a single SSE event chunk and route deltas to accumulators.
-    async fn parse_and_route(
-        chunk: &str,
+    async fn parse_and_route_line(
+        line: &str,
         thinking: &Mutex<Vec<String>>,
         text: &Mutex<Vec<String>>,
         tool_calls: &Mutex<Vec<ToolCallAccum>>,
     ) {
-        // Process ALL `data:` lines in the chunk (may contain multiple SSE events)
-        for line in chunk.lines() {
-            let Some(json_str) = line.strip_prefix("data: ") else { continue };
-            let Ok(val) = serde_json::from_str::<Value>(json_str) else { continue };
+        let Some(json_str) = line.strip_prefix("data:").map(str::trim_start) else { return };
+        if json_str == "[DONE]" { return; }
+        let Ok(val) = serde_json::from_str::<Value>(json_str) else { return };
 
-            let typ = val.get("type").and_then(|t| t.as_str());
-            match typ {
+        let typ = val.get("type").and_then(|t| t.as_str());
+        match typ {
             Some("content_block_start") => {
                 // Check if the block is a tool_use
                 if let Some(block) = val.get("content_block") {
@@ -138,6 +167,7 @@ impl StreamForwarder {
                             .unwrap_or("")
                             .to_string();
                         tool_calls.lock().await.push(ToolCallAccum {
+                            id: block.get("id").and_then(|id| id.as_str()).map(str::to_owned),
                             name,
                             fragments: Vec::new(),
                         });
@@ -169,9 +199,47 @@ impl StreamForwarder {
                     _ => {}
                 }
             }
-            _ => {}
+            _ => Self::route_openai_delta(&val, thinking, text, tool_calls).await,
         }
-        } // end for line in chunk.lines()
+    }
+
+    async fn route_openai_delta(
+        value: &Value,
+        thinking: &Mutex<Vec<String>>,
+        text: &Mutex<Vec<String>>,
+        tool_calls: &Mutex<Vec<ToolCallAccum>>,
+    ) {
+        let Some(delta) = value.get("choices").and_then(Value::as_array)
+            .and_then(|choices| choices.first()).and_then(|choice| choice.get("delta")) else { return };
+
+        if let Some(part) = delta.get("reasoning_content").or_else(|| delta.get("reasoning"))
+            .and_then(Value::as_str) {
+            thinking.lock().await.push(part.to_string());
+        }
+        if let Some(part) = delta.get("content").and_then(Value::as_str) {
+            text.lock().await.push(part.to_string());
+        }
+        if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
+            let mut accumulators = tool_calls.lock().await;
+            for call in calls {
+                let index = call.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+                while accumulators.len() <= index {
+                    accumulators.push(ToolCallAccum { id: None, name: String::new(), fragments: Vec::new() });
+                }
+                let accumulator = &mut accumulators[index];
+                if let Some(id) = call.get("id").and_then(Value::as_str) {
+                    accumulator.id = Some(id.to_string());
+                }
+                if let Some(function) = call.get("function") {
+                    if let Some(name) = function.get("name").and_then(Value::as_str) {
+                        accumulator.name.push_str(name);
+                    }
+                    if let Some(arguments) = function.get("arguments").and_then(Value::as_str) {
+                        accumulator.fragments.push(arguments.to_string());
+                    }
+                }
+            }
+        }
     }
 
     /// Build a NormalizedMessage from the accumulated structured parts.
@@ -217,5 +285,27 @@ impl StreamForwarder {
     /// Backward compatibility: returns raw accumulated text.
     pub async fn get_text(&self) -> String {
         self.get_raw_text().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SseLineBuffer;
+
+    #[test]
+    fn buffers_sse_lines_split_across_network_chunks() {
+        let mut buffer = SseLineBuffer::default();
+        assert!(buffer.push(b"data: {\"type\":\"content_bl").is_empty());
+        let lines = buffer.push(b"ock_delta\"}\r\n\r\n");
+        assert_eq!(lines, vec!["data: {\"type\":\"content_block_delta\"}", ""]);
+        assert!(buffer.finish().is_none());
+    }
+
+    #[test]
+    fn preserves_utf8_split_across_chunks() {
+        let mut buffer = SseLineBuffer::default();
+        let bytes = "data: 中文\n".as_bytes();
+        assert!(buffer.push(&bytes[..8]).is_empty());
+        assert_eq!(buffer.push(&bytes[8..]), vec!["data: 中文"]);
     }
 }

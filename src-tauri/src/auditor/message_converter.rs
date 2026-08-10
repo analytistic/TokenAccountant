@@ -16,6 +16,7 @@ pub enum ContentPart {
 /// A tool call extracted from an assistant message.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ToolCall {
+    pub id: Option<String>,
     pub name: String,
     pub arguments: String,
 }
@@ -83,6 +84,7 @@ pub struct ToolDef {
 pub struct Conversation {
     pub messages: Vec<NormalizedMessage>,
     pub tools: Vec<ToolDef>,
+    pub response_format: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +97,7 @@ pub struct Conversation {
 /// All system messages are collected, tool_use → tool_calls, tool_result → "tool" role.
 pub fn from_anthropic_body(body_str: &str) -> Conversation {
     let Ok(body_val) = serde_json::from_str::<Value>(body_str) else {
-        return Conversation { messages: vec![], tools: vec![] };
+        return Conversation { messages: vec![], tools: vec![], response_format: None };
     };
 
     let system = body_val.get("system");
@@ -106,7 +108,87 @@ pub fn from_anthropic_body(body_str: &str) -> Conversation {
         .unwrap_or(&[]);
     let tools = body_val.get("tools");
 
-    from_anthropic(system, messages, tools)
+    let mut conversation = from_anthropic(system, messages, tools);
+    conversation.response_format = body_val.get("response_format")
+        .or_else(|| body_val.get("output_config").and_then(|v| v.get("format")))
+        .map(Value::to_string);
+    conversation
+}
+
+/// Convert an OpenAI Chat Completions request into the normalized conversation
+/// consumed by the DeepSeek V4 encoder.
+pub fn from_openai_body(body_str: &str) -> Conversation {
+    let Ok(body) = serde_json::from_str::<Value>(body_str) else {
+        return Conversation { messages: vec![], tools: vec![], response_format: None };
+    };
+
+    let messages = body.get("messages").or_else(|| body.as_array().map(|_| &body)).and_then(Value::as_array)
+        .map(Vec::as_slice).unwrap_or(&[]);
+    let mut normalized = Vec::new();
+    for message in messages {
+        let Some(role) = message.get("role").and_then(Value::as_str) else { continue };
+        let content_parts = openai_content_parts(message.get("content"));
+        let reasoning = message.get("reasoning_content")
+            .or_else(|| message.get("reasoning"))
+            .and_then(Value::as_str).map(str::to_owned);
+        let tool_calls = message.get("tool_calls").and_then(Value::as_array).map(|calls| {
+            calls.iter().filter_map(|call| {
+                let function = call.get("function").unwrap_or(call);
+                let name = function.get("name").and_then(Value::as_str)?;
+                let arguments = function.get("arguments").map(|v| {
+                    v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string())
+                }).unwrap_or_else(|| "{}".to_string());
+                Some(ToolCall {
+                    id: call.get("id").and_then(Value::as_str).map(str::to_owned),
+                    name: name.to_string(),
+                    arguments,
+                })
+            }).collect::<Vec<_>>()
+        }).filter(|calls| !calls.is_empty());
+
+        normalized.push(NormalizedMessage {
+            role: role.to_string(),
+            content_parts,
+            reasoning,
+            tool_calls,
+            tool_call_id: message.get("tool_call_id").and_then(Value::as_str).map(str::to_owned),
+        });
+    }
+
+    let tools = body.get("tools").and_then(Value::as_array).map(|tools| {
+        tools.iter().filter_map(|tool| {
+            let function = tool.get("function").unwrap_or(tool);
+            let name = function.get("name").and_then(Value::as_str)?;
+            Some(ToolDef {
+                name: name.to_string(),
+                description: function.get("description").and_then(Value::as_str).unwrap_or("").to_string(),
+                input_schema: function.get("parameters").map(Value::to_string).unwrap_or_else(|| "{}".to_string()),
+            })
+        }).collect()
+    }).unwrap_or_default();
+
+    Conversation {
+        messages: normalized,
+        tools,
+        response_format: body.get("response_format").map(Value::to_string),
+    }
+}
+
+fn openai_content_parts(content: Option<&Value>) -> Vec<ContentPart> {
+    match content {
+        Some(Value::String(text)) => vec![ContentPart::Text(text.clone())],
+        Some(Value::Array(parts)) => parts.iter().filter_map(|part| {
+            match part.get("type").and_then(Value::as_str) {
+                Some("text") | Some("input_text") => part.get("text")
+                    .and_then(Value::as_str).map(|s| ContentPart::Text(s.to_string())),
+                Some("image_url") => part.get("image_url").and_then(|v| {
+                    v.as_str().or_else(|| v.get("url").and_then(Value::as_str))
+                }).map(|s| ContentPart::ImageUrl(s.to_string())),
+                _ => None,
+            }
+        }).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Low-level conversion from parsed JSON values.
@@ -255,6 +337,7 @@ pub fn from_anthropic(
     Conversation {
         messages: conv_messages,
         tools: conv_tools,
+        response_format: None,
     }
 }
 
@@ -368,6 +451,7 @@ fn convert_block(
             let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
             let args = block.get("input").map(|i| i.to_string()).unwrap_or_else(|| "{}".to_string());
             tool_calls.push(ToolCall {
+                id: block.get("id").and_then(Value::as_str).map(str::to_owned),
                 name: name.to_string(),
                 arguments: args,
             });

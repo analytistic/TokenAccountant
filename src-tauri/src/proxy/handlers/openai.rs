@@ -37,7 +37,7 @@ async fn forward_with_audit(
     let audit_tokenizer = tokenizer.clone();
 
     // Extract template params from request body
-    let template_params = crate::auditor::tokenizer::extract_template_params(&body_str);
+    let template_params = crate::auditor::tokenizer::extract_template_params(&body_str, &detected.model);
 
     // --- 3. Spawn parallel audit task (input tokens + cache) ---
     let audit_state = state.clone();
@@ -47,7 +47,7 @@ async fn forward_with_audit(
     let audit_params = template_params.clone();
     let audit_handle = tokio::spawn(async move {
         let (real_input, real_cached, conv, detect_text) = if let Some(ref t) = audit_tokenizer {
-            let conv = crate::auditor::message_converter::from_anthropic_body(&audit_body);
+            let conv = crate::auditor::message_converter::from_openai_body(&audit_body);
             let request_text = t.apply_chat_template_with(&conv, &audit_params);
             let ids = t.encode(&request_text);
             let (cached_hit, _) = audit_state.cache_detector.lock().await.detect(&ids);
@@ -55,7 +55,7 @@ async fn forward_with_audit(
             (needs_prefill, cached_hit as i32, conv, request_text)
         } else {
             (0, 0, crate::auditor::message_converter::Conversation {
-                messages: vec![], tools: vec![],
+                messages: vec![], tools: vec![], response_format: None,
             }, String::new())
         };
         (real_input, real_cached, audit_detected_model, conv, detect_text)
@@ -115,7 +115,7 @@ async fn forward_with_audit(
                         extract_usage(&full_text, audit_fmt);
 
                     let audit_result = audit_handle.await.unwrap_or((0, 0, String::new(), crate::auditor::message_converter::Conversation {
-                        messages: vec![], tools: vec![],
+                        messages: vec![], tools: vec![], response_format: None,
                     }, String::new()));
                     let (real_input, real_cached, model_name, conv, detect_text) = audit_result;
 
